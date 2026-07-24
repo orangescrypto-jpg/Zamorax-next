@@ -56,6 +56,58 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const now = new Date().toISOString()
     const sellerId = String(order.seller_id ?? order.sellerId ?? "")
 
+    // ── Release real funds from Flutterwave escrow (if applicable) ─────
+    // Marking the order "completed" below only updates Zamorax's own
+    // ledger (seller_wallets) — it does not move any actual money. For
+    // orders paid through Flutterwave with the escrow flag on, the real
+    // cash is still sitting held at Flutterwave until we explicitly call
+    // their /transactions/escrow/settle endpoint (same call the admin
+    // "Release Escrow" button on /admin/payments makes — see
+    // app/api/payment/release-escrow/route.ts). Doing it here means a
+    // normal buyer confirmation releases the real funds immediately
+    // instead of leaving them stuck until someone notices and releases
+    // manually days later.
+    //
+    // Non-fatal by design: if this call fails (network blip, Flutterwave
+    // downtime, secret key misconfigured), we still complete the order
+    // and credit the seller's wallet as before — the admin panel's stuck
+    // -escrow button (orders where status stays escrow_held past 7 days)
+    // is the fallback net for exactly this case. We log the failure and
+    // note it in the wallet_transactions description so it's visible.
+    let escrowReleaseFailed = false
+    const paymentProvider = String(order.payment_provider ?? order.paymentProvider ?? "")
+    const flwTransactionId = order.flw_transaction_id ?? order.flwTransactionId
+
+    if (paymentProvider === "flutterwave" && flwTransactionId) {
+      const secretKey = process.env.FLW_SECRET_KEY
+      if (!secretKey) {
+        console.error("[confirm-delivery] FLW_SECRET_KEY not configured — skipping escrow settle, order will complete anyway")
+        escrowReleaseFailed = true
+      } else {
+        try {
+          const flwRes = await fetch("https://api.ravepay.co/v2/gpx/transactions/escrow/settle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: String(flwTransactionId), secret_key: secretKey }),
+          })
+          const flwData = await flwRes.json()
+          if (!flwRes.ok || flwData.status !== "success") {
+            console.error("[confirm-delivery] Flutterwave escrow settle failed:", flwData.message || flwData)
+            escrowReleaseFailed = true
+          }
+        } catch (err) {
+          console.error("[confirm-delivery] Flutterwave escrow settle request failed:", err)
+          escrowReleaseFailed = true
+        }
+      }
+    } else if (paymentProvider === "flutterwave" && !flwTransactionId) {
+      // Order predates migration 0004 (flw_transaction_id wasn't being
+      // saved yet) — nothing to settle against. Falls back to the admin
+      // panel's manual release-via-Flutterwave-dashboard path.
+      console.error(`[confirm-delivery] Order ${orderId} is a Flutterwave order with no flw_transaction_id on file — cannot auto-settle`)
+      escrowReleaseFailed = true
+    }
+
     // FIX: this previously wrote buyer_confirmed_at, buyer_rating, and
     // buyer_review — none of which exist on the orders table (see
     // migrations/0001_baseline_schema.sql). Ratings/reviews already have
@@ -65,7 +117,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // `completed_at`, which this now uses instead of the nonexistent one.
     await d1Query(
       `UPDATE orders SET status = ?, escrow_status = ?, completed_at = ?, updated_at = ? WHERE id = ?`,
-      ["completed", "released_to_seller", now, now, orderId],
+      [
+        "completed",
+        escrowReleaseFailed ? "release_pending" : "released_to_seller",
+        now, now, orderId,
+      ],
       nativeDB,
     )
 
@@ -129,7 +185,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
           grossKobo,
           commKobo,
           arbKobo,
-          `Escrow released — order #${String(orderId).slice(0, 8).toUpperCase()}`,
+          `Escrow released — order #${String(orderId).slice(0, 8).toUpperCase()}`
+            + (escrowReleaseFailed ? " (wallet credited; Flutterwave payout pending admin release)" : ""),
           orderId,
           String(order.payment_reference ?? order.paymentReference ?? ""),
           "completed",
@@ -167,7 +224,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       }
     }
 
-    return NextResponse.json({ success: true, payout, sellerId })
+    return NextResponse.json({ success: true, payout, sellerId, escrowReleaseFailed })
   } catch (err: any) {
     console.error("[POST /api/orders/confirm-delivery]", err)
     return NextResponse.json({ error: err.message ?? "Server error" }, { status: 500 })
