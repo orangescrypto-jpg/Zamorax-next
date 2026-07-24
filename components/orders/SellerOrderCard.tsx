@@ -163,7 +163,7 @@ export function SellerOrderCard({ order, onSuccess }: { order: Order; onSuccess?
   // the listing page). A seller's order can bundle several different
   // listings together, so we show each line's title + qty separately
   // rather than one summed number that would blur which item is which.
-  const lineItems = order.lineItems ?? []
+  const lineItems = Array.isArray(order.lineItems) ? order.lineItems : []
   const hasMultipleLines = lineItems.length > 1
   const singleLineQty = lineItems.length === 1 ? (lineItems[0]?.qty ?? 0) : 0
 
