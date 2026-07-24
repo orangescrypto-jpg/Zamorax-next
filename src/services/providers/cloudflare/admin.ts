@@ -146,13 +146,15 @@ function rowToDoc(row: Record<string, unknown>): FirestoreDoc {
   for (const col of boolCols) if (col in doc) doc[col] = !!doc[col]
 
   // D1 stores JSON-shaped data (images, attributes, flash deals, delivery
-  // options) as TEXT columns. Callers that go through the dedicated
-  // ListingsService/API get these parsed already, but generic AdminService
+  // options, order line items) as TEXT columns. Callers that go through a
+  // dedicated service get these parsed already, but generic AdminService
   // reads (e.g. usePaginatedCollection on the seller dashboard) were handing
   // back raw JSON strings — so listing.images?.[0] silently returned "[" and
-  // broke every image on the dashboard. Parse them here so every consumer of
-  // the generic row mapper gets real arrays/objects.
-  const jsonCols = ["images", "attributes", "flashDeal", "deliveryOptions"]
+  // broke every image on the dashboard, and orders.lineItems.map(...) threw
+  // "lineItems.map is not a function" on the seller orders page since a
+  // non-empty JSON string passes `?? []` unchanged. Parse them here so every
+  // consumer of the generic row mapper gets real arrays/objects.
+  const jsonCols = ["images", "attributes", "flashDeal", "deliveryOptions", "lineItems"]
   for (const col of jsonCols) {
     if (typeof doc[col] === "string") {
       try { doc[col] = JSON.parse(doc[col] as string) } catch { /* leave as-is */ }
