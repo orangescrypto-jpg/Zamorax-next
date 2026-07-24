@@ -47,6 +47,23 @@ const CANCEL_REASON_PRESETS = [
   "Other",
 ]
 
+interface StuckEscrowOrder {
+  id:              string
+  buyerName?:      string
+  sellerName?:     string
+  sellerStoreName?: string
+  itemTitle?:      string
+  totalAmount:     number
+  sellerPayout:    number
+  paymentReference?: string
+  flwTransactionId?: string | number
+  escrowHeldAt?:   string | null
+  createdAt?:      string | null
+  alreadyConfirmed?: boolean
+}
+
+const ESCROW_STUCK_DAYS = 7
+
 interface PendingPayment {
   id:             string
   reference:      string
@@ -105,6 +122,12 @@ export default function AdminPaymentsPage() {
   const [proofImageUrl,  setProofImageUrl]  = useState<string | null>(null)
   const [expandedCart,   setExpandedCart]   = useState<string | null>(null)
 
+  // ── Stuck escrow orders ───────────────────────────────────────────────
+  const [stuckOrders,    setStuckOrders]    = useState<StuckEscrowOrder[]>([])
+  const [stuckLoading,   setStuckLoading]   = useState(true)
+  const [releaseTarget,  setReleaseTarget]  = useState<StuckEscrowOrder | null>(null)
+  const [releasing,      setReleasing]      = useState(false)
+
   // ── Reject payment dialog ────────────────────────────────────────────
   const [rejectTarget,   setRejectTarget]   = useState<PendingPayment | null>(null)
   const [rejectPreset,   setRejectPreset]   = useState(REJECTION_REASON_PRESETS[0])
@@ -162,9 +185,94 @@ export default function AdminPaymentsPage() {
     }
   }, [toast])
 
+  const fetchStuckOrders = useCallback(async () => {
+    setStuckLoading(true)
+    try {
+      const rows = await AdminService.getCollection("orders") as Record<string, any>[]
+      const cutoff = Date.now() - ESCROW_STUCK_DAYS * 24 * 60 * 60 * 1000
+      const stuck = rows
+        .filter(r => {
+          const status = String(r.status ?? "")
+          const escrowStatus = String(r.escrowStatus ?? r.escrow_status ?? "")
+          const provider = String(r.paymentProvider ?? r.payment_provider ?? "")
+          if (provider !== "flutterwave") return false
+
+          // Case 1: buyer never confirmed delivery — still sitting held,
+          // past the grace period (give buyers a week before nagging admin).
+          if (status === "escrow_held") {
+            const heldAt = r.escrowHeldAt ?? r.escrow_held_at ?? r.createdAt ?? r.created_at
+            if (!heldAt) return false
+            const t = new Date(heldAt).getTime()
+            return Number.isFinite(t) && t <= cutoff
+          }
+
+          // Case 2: buyer already confirmed, order is "completed" in our
+          // ledger, but the real Flutterwave settle call failed at that
+          // moment (see app/api/orders/confirm-delivery/route.ts) — show
+          // these immediately, no waiting period, since the seller's
+          // wallet already shows the money and they'll be asking for it.
+          if (status === "completed" && escrowStatus === "release_pending") return true
+
+          return false
+        })
+        .map(r => ({
+          id:               String(r.id ?? ""),
+          buyerName:        r.buyerName ?? r.buyer_name ?? undefined,
+          sellerName:       r.sellerName ?? r.seller_name ?? undefined,
+          sellerStoreName:  r.sellerStoreName ?? r.seller_store_name ?? undefined,
+          itemTitle:        r.itemTitle ?? r.item_title ?? undefined,
+          totalAmount:      Number(r.totalAmount ?? r.total_amount ?? 0),
+          sellerPayout:     Number(r.sellerPayout ?? r.seller_payout ?? 0),
+          paymentReference: r.paymentReference ?? r.payment_reference ?? undefined,
+          flwTransactionId: r.flwTransactionId ?? r.flw_transaction_id ?? undefined,
+          escrowHeldAt:     r.escrowHeldAt ?? r.escrow_held_at ?? null,
+          createdAt:        r.createdAt ?? r.created_at ?? null,
+          alreadyConfirmed: String(r.status ?? "") === "completed",
+        }))
+        .sort((a, b) => new Date(a.escrowHeldAt ?? a.createdAt ?? 0).getTime() - new Date(b.escrowHeldAt ?? b.createdAt ?? 0).getTime())
+      setStuckOrders(stuck)
+    } catch (err: any) {
+      toast({ title: "Failed to load stuck escrow orders", description: err.message, variant: "destructive" })
+    } finally {
+      setStuckLoading(false)
+    }
+  }, [toast])
+
   useEffect(() => {
     fetchPayments()
-  }, [fetchPayments])
+    fetchStuckOrders()
+  }, [fetchPayments, fetchStuckOrders])
+
+  const releasingRef = useRef<Set<string>>(new Set())
+
+  const handleReleaseEscrow = async () => {
+    if (!releaseTarget) return
+    if (releasingRef.current.has(releaseTarget.id)) return
+    releasingRef.current.add(releaseTarget.id)
+    setReleasing(true)
+    try {
+      const res  = await fetch("/api/payment/release-escrow", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ orderId: releaseTarget.id, adminId: user?.uid }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+
+      setStuckOrders(prev => prev.filter(o => o.id !== releaseTarget.id))
+      toast({
+        title:       "✅ Escrow Released",
+        description: `Funds released to ${releaseTarget.sellerName ?? "seller"} for "${releaseTarget.itemTitle ?? "order"}".`,
+        variant:     "success",
+      })
+      setReleaseTarget(null)
+    } catch (err: any) {
+      toast({ title: "Release failed", description: err.message, variant: "destructive" })
+    } finally {
+      releasingRef.current.delete(releaseTarget.id)
+      setReleasing(false)
+    }
+  }
 
   const filtered = payments.filter(p => {
     // This page is for confirming manual bank transfers only. Paystack /
@@ -354,6 +462,55 @@ export default function AdminPaymentsPage() {
           Refresh
         </Button>
       </div>
+
+      {/* Stuck Escrow Orders */}
+      {!stuckLoading && stuckOrders.length > 0 && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 overflow-hidden">
+          <div className="px-5 py-3 border-b border-orange-200 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <h2 className="font-semibold text-orange-900">
+              Stuck Escrow ({stuckOrders.length})
+            </h2>
+          </div>
+          <p className="px-5 pt-3 text-sm text-orange-800">
+            Real funds are still held at Flutterwave for these orders — either the buyer hasn't confirmed
+            delivery after {ESCROW_STUCK_DAYS}+ days, or they confirmed but the automatic release failed.
+            Release manually once you've confirmed the order should be paid out.
+          </p>
+          <div className="divide-y divide-orange-200">
+            {stuckOrders.map(order => (
+              <div key={order.id} className="px-5 py-4 flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="font-medium truncate">{order.itemTitle ?? "Order"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Seller: {order.sellerStoreName || order.sellerName || "—"} · Buyer: {order.buyerName ?? "—"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Payout: {formatKobo(order.sellerPayout || order.totalAmount)} · Held since {formatDate(order.escrowHeldAt ?? order.createdAt)}
+                  </p>
+                  {order.alreadyConfirmed && (
+                    <p className="text-xs text-amber-700 flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> Buyer already confirmed delivery — seller's wallet was credited, but the real Flutterwave payout failed and is still pending.
+                    </p>
+                  )}
+                  {!order.flwTransactionId && (
+                    <p className="text-xs text-red-600 flex items-center gap-1">
+                      <XCircle className="h-3 w-3" /> No Flutterwave transaction id on file — release will fail; settle manually via the Flutterwave dashboard instead.
+                    </p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-orange-600 hover:bg-orange-700 text-white shrink-0"
+                  onClick={() => setReleaseTarget(order)}
+                >
+                  Release Escrow
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -680,6 +837,49 @@ export default function AdminPaymentsPage() {
             >
               {cancelling ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Ban className="h-4 w-4 mr-1.5" />}
               Delete Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Release escrow confirmation */}
+      <Dialog open={!!releaseTarget} onOpenChange={(open) => { if (!open) setReleaseTarget(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              Release Escrow
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800">
+                This calls Flutterwave's escrow settlement API and pays the seller immediately. Only do
+                this once you've independently confirmed the order was actually fulfilled — this cannot
+                be reversed from here.
+              </p>
+            </div>
+            {releaseTarget && (
+              <div className="text-sm space-y-1">
+                <p><span className="text-muted-foreground">Item:</span> {releaseTarget.itemTitle ?? "—"}</p>
+                <p><span className="text-muted-foreground">Seller:</span> {releaseTarget.sellerStoreName || releaseTarget.sellerName || "—"}</p>
+                <p><span className="text-muted-foreground">Payout:</span> {formatKobo(releaseTarget.sellerPayout || releaseTarget.totalAmount)}</p>
+                <p><span className="text-muted-foreground">Held since:</span> {formatDate(releaseTarget.escrowHeldAt ?? releaseTarget.createdAt)}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReleaseTarget(null)} disabled={releasing}>
+              Back
+            </Button>
+            <Button
+              onClick={handleReleaseEscrow}
+              disabled={releasing}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {releasing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+              Confirm Release
             </Button>
           </DialogFooter>
         </DialogContent>
