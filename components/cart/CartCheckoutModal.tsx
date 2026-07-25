@@ -18,6 +18,11 @@ import { useCartItemsStore } from "@/store/cartStore"
 import { AdminService, serverTimestamp, ShippingService, LogisticsService } from "@/src/services"
 import { ManualPaymentInstructions } from "@/components/payment/ManualPaymentInstructions"
 import { usePaymentMethods } from "@/hooks/usePaymentMethods"
+
+// Single source of truth for this checkout flow's payment purpose — used
+// both in the pending_payments write and the escrow gate below, so the two
+// can't silently drift apart if this file is edited later.
+const CART_PAYMENT_PURPOSE = "cart_order"
 import { useLastAddress } from "@/hooks/useLastAddress"
 import { PaymentMethodPicker } from "@/components/payment/PaymentMethodPicker"
 import { formatPrice } from "@/lib/utils"
@@ -231,7 +236,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       // Write ONE doc to pending_payments — only real schema columns at top
       // level; everything else goes into metadata (matches manual payment provider).
       await AdminService.addDoc("pending_payments", {
-        purpose:         "cart_order",
+        purpose:         CART_PAYMENT_PURPOSE,
         reference,
         provider:        selectedMethod?.provider ?? "manual",
         amount:          capturedTotal,
@@ -263,13 +268,19 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
             amount:      capturedTotal,
             email:       user.email,
             reference,
-            metadata:    { purpose: "cart_order" },
+            metadata:    { purpose: CART_PAYMENT_PURPOSE },
             callbackUrl: `${window.location.origin}/dashboard/buyer/orders`,
             channel:     selectedMethod.paystackChannel,
             // Cart orders can span multiple sellers, so no single
             // subaccount is passed here — the commission split (if any)
             // happens per-seller when escrow is released, not at collection.
-            escrow:      selectedMethod.provider === "flutterwave",
+            // Escrow only makes sense for real purchases — gated on purpose
+            // (always "cart_order" here), not just provider, so this can't
+            // accidentally escrow-flag a non-purchase payment if this modal
+            // is ever reused for something else (matches the
+            // purpose === "order" gate in
+            // src/services/providers/flutterwave/payment.ts).
+            escrow:      selectedMethod.provider === "flutterwave" && CART_PAYMENT_PURPOSE === "cart_order",
           }),
         })
         const initData = await initRes.json()
