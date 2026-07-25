@@ -58,7 +58,14 @@ export function ListingForm() {
       shippingMethods: ["meetup"],
       couponEnabled: false,
       boostType: "none",
-      acceptTerms: true,
+      // FIX: was defaulting to true, meaning sellers were silently
+      // "pre-agreed" to the listing rules before ever seeing the checkbox.
+      // That also caused the confusing checked/unchecked mismatch seen
+      // across review-step screenshots — it started checked by default,
+      // then flipped false the moment it was tapped (normal toggle
+      // behavior), which looked like a bug but was actually the true state
+      // finally being reflected correctly after the Controller fix.
+      acceptTerms: false as unknown as true,
       offersEnabled: true,
       unitOfSale: "piece",
     }
@@ -218,12 +225,15 @@ export function ListingForm() {
           {couponsOn && step === couponStepNum && <Step6Coupon />}
           {step === boostStepNum && <Step6Boost />}
           {step === reviewStepNum && <Step7Review />}
-          {/* TEMP DEBUG — remove once the Publish-disabled issue is found.
-              Lists every field react-hook-form currently considers invalid,
-              since dev tools aren't reachable on mobile. */}
-          {step === reviewStepNum && Object.keys(form.formState.errors).length > 0 && (
+          {/* TEMP DEBUG — remove once found. errors being empty doesn't
+              guarantee isValid is true in RHF; show both directly. */}
+          {step === reviewStepNum && (
             <div className="mt-4 p-3 border-2 border-red-500 rounded bg-red-50 text-sm">
-              <p className="font-bold text-red-700 mb-1">DEBUG — invalid fields:</p>
+              <p className="font-bold text-red-700">DEBUG</p>
+              <p className="text-red-700">isValid: {String(form.formState.isValid)}</p>
+              <p className="text-red-700">isValidating: {String(form.formState.isValidating)}</p>
+              <p className="text-red-700">acceptTerms value: {String(form.watch("acceptTerms"))}</p>
+              <p className="text-red-700">error count: {Object.keys(form.formState.errors).length}</p>
               {Object.entries(form.formState.errors).map(([key, err]: [string, any]) => (
                 <p key={key} className="text-red-700">
                   <strong>{key}</strong>: {String(err?.message || JSON.stringify(err))}
