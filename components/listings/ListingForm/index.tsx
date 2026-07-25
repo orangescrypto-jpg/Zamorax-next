@@ -225,24 +225,6 @@ export function ListingForm() {
           {couponsOn && step === couponStepNum && <Step6Coupon />}
           {step === boostStepNum && <Step6Boost />}
           {step === reviewStepNum && <Step7Review />}
-          {/* TEMP DEBUG */}
-          {step === reviewStepNum && (
-            <div className="mt-4 p-3 border-2 border-red-500 rounded bg-red-50 text-sm">
-              <p className="font-bold text-red-700">DEBUG</p>
-              <p className="text-red-700">isValid: {String(form.formState.isValid)}</p>
-              <button
-                type="button"
-                className="mt-2 px-3 py-1 bg-red-600 text-white rounded"
-                onClick={async () => {
-                  const ok = await form.trigger()
-                  console.log("full trigger result", ok, form.formState.errors)
-                  alert(JSON.stringify(form.formState.errors, null, 2))
-                }}
-              >
-                Run full validation
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="flex justify-between mt-8 pt-6 border-t">
