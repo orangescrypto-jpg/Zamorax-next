@@ -524,6 +524,18 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                   </div>
                 </div>
 
+                {/* Notice only — third-party (non-Zamorax-Direct) cart
+                    orders over 100k are recommended to use manual
+                    transfer. Nothing is restricted; buyer can still pick
+                    any enabled method below. Mirrors BuyNowModal. */}
+                {hasThirdPartySeller && grandTotal() > 100_000 * 100 && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                    <p className="text-xs text-amber-800">
+                      For orders above ₦100,000 from third-party sellers, we recommend paying via <strong>Bank Transfer (Manual)</strong> for added safety.
+                    </p>
+                  </div>
+                )}
+
                 {/* Method choice — auto-detects how many the admin has
                     enabled. 1 enabled -> just the confirmation line. 2+ ->
                     shared picker. */}
