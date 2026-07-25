@@ -13,6 +13,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { nigerianStates } from "@/constants/nigerianStates"
 import { Package, Weight, Info } from "lucide-react"
 
+// See Step2Details.tsx for the full explanation — valueAsNumber turns a
+// blank input into NaN (not undefined), which fails an optional() schema
+// check silently. weightKg has a 0.5 default so this is less likely to be
+// hit, but stays consistent with the other optional numeric fields.
+const optionalNumber = (v: unknown) => {
+  if (v === "" || v === null || v === undefined) return undefined
+  const n = Number(v)
+  return Number.isNaN(n) ? undefined : n
+}
+
 export function Step5Location() {
   const { register, watch, setValue, formState: { errors } } = useFormContext()
   const nationwide = watch("deliveryNationwide")
@@ -72,7 +82,7 @@ export function Step5Location() {
               min="0.1"
               max="100"
               placeholder="0.5"
-              {...register("weightKg", { valueAsNumber: true })}
+              {...register("weightKg", { setValueAs: optionalNumber })}
               className="max-w-[120px]"
               onFocus={e => {
                 // Clear 0 on focus so user doesn't have to delete it
