@@ -686,6 +686,37 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             </div>
           )}
 
+          {/* Specifications — generic renderer for listing.attributes.
+              Step3's per-category components (ComputingAttr, VehiclesAttr,
+              etc.) collect and save real spec data — device type, RAM,
+              storage, brand, and so on — but nothing on this page ever
+              displayed it back to buyers; attributes was only ever read
+              for a .unit price-formatting lookup elsewhere on this file.
+              This renders whatever keys are present for any category
+              without needing a hardcoded field list per category, and
+              skips internal/non-buyer-facing keys and empty values. */}
+          {listing.attributes && Object.keys(listing.attributes).length > 0 && (
+            <div className="border-t border-border pt-4 space-y-2">
+              <h2 className="font-semibold text-sm text-foreground">Specifications</h2>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                {Object.entries(listing.attributes)
+                  .filter(([key, value]) => {
+                    if (key === "unit") return false // internal, used for price formatting only
+                    if (value === undefined || value === null || value === "") return false
+                    return true
+                  })
+                  .map(([key, value]) => (
+                    <div key={key} className="contents">
+                      <dt className="text-muted-foreground capitalize">
+                        {key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim()}
+                      </dt>
+                      <dd className="text-foreground font-medium">{String(value)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          )}
+
           {/* Coupon code input — only shown when the listing has a coupon
               and no flash deal is currently active (flash deal takes
               priority, so the input is hidden rather than letting a buyer
