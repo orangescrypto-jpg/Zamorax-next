@@ -225,20 +225,22 @@ export function ListingForm() {
           {couponsOn && step === couponStepNum && <Step6Coupon />}
           {step === boostStepNum && <Step6Boost />}
           {step === reviewStepNum && <Step7Review />}
-          {/* TEMP DEBUG — remove once found. errors being empty doesn't
-              guarantee isValid is true in RHF; show both directly. */}
+          {/* TEMP DEBUG */}
           {step === reviewStepNum && (
             <div className="mt-4 p-3 border-2 border-red-500 rounded bg-red-50 text-sm">
               <p className="font-bold text-red-700">DEBUG</p>
               <p className="text-red-700">isValid: {String(form.formState.isValid)}</p>
-              <p className="text-red-700">isValidating: {String(form.formState.isValidating)}</p>
-              <p className="text-red-700">acceptTerms value: {String(form.watch("acceptTerms"))}</p>
-              <p className="text-red-700">error count: {Object.keys(form.formState.errors).length}</p>
-              {Object.entries(form.formState.errors).map(([key, err]: [string, any]) => (
-                <p key={key} className="text-red-700">
-                  <strong>{key}</strong>: {String(err?.message || JSON.stringify(err))}
-                </p>
-              ))}
+              <button
+                type="button"
+                className="mt-2 px-3 py-1 bg-red-600 text-white rounded"
+                onClick={async () => {
+                  const ok = await form.trigger()
+                  console.log("full trigger result", ok, form.formState.errors)
+                  alert(JSON.stringify(form.formState.errors, null, 2))
+                }}
+              >
+                Run full validation
+              </button>
             </div>
           )}
         </div>
