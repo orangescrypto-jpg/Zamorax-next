@@ -1,5 +1,5 @@
 "use client"
-import { useFormContext } from "react-hook-form"
+import { useFormContext, Controller } from "react-hook-form"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card } from "@/components/ui/card"
@@ -8,7 +8,7 @@ import { getCategoryBySlug } from "@/constants/categories"
 import { useFeeSettings } from "@/hooks/useFeeSettings"
 
 export function Step7Review() {
-  const { watch, register, formState: { errors } } = useFormContext()
+  const { watch, control, formState: { errors } } = useFormContext()
   const { fees } = useFeeSettings()
   const form = watch()
   const category = getCategoryBySlug(form.categorySlug)
@@ -31,7 +31,23 @@ export function Step7Review() {
       </div>
 
       <div className="flex items-start gap-3 p-4 border rounded-lg bg-accent/10">
-        <Checkbox id="terms" {...register("acceptTerms")} />
+        {/* FIX: Checkbox is a Radix button under the hood, not a native
+            <input>, so register() never captures its checked state —
+            acceptTerms stayed undefined forever and silently blocked
+            Publish with no visible error. Controller wires onCheckedChange
+            to the form value directly, the correct pattern for non-native
+            inputs with react-hook-form. */}
+        <Controller
+          name="acceptTerms"
+          control={control}
+          render={({ field }) => (
+            <Checkbox
+              id="terms"
+              checked={!!field.value}
+              onCheckedChange={(checked) => field.onChange(checked === true)}
+            />
+          )}
+        />
         <div>
           <Label htmlFor="terms" className="font-medium cursor-pointer">I agree to Zamorax Seller Rules</Label>
           <p className="text-sm text-muted-foreground mt-1">
