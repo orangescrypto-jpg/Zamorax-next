@@ -16,6 +16,20 @@ import { useFeeSettings } from "@/hooks/useFeeSettings"
 import { calculateFees } from "@/src/services/feeSettings"
 import { formatPrice } from "@/lib/utils"
 
+// FIX: register(field, { valueAsNumber: true }) turns a blank input into
+// NaN, not undefined. NaN is still typeof "number", so Zod's
+// z.number().optional() doesn't skip it — it tries to validate NaN and
+// fails with "Expected number, received nan", silently blocking the whole
+// form's isValid with no error shown on the field itself (since RHF only
+// flags a field as touched on blur/change — a field the seller never
+// touched can still poison isValid). Used below for every optional numeric
+// field so "leave blank" actually means blank, not a hidden NaN.
+const optionalNumber = (v: unknown) => {
+  if (v === "" || v === null || v === undefined) return undefined
+  const n = Number(v)
+  return Number.isNaN(n) ? undefined : n
+}
+
 // ── Live fee note shown below price input ─────────────────────────────────────
 
 function PriceFeeNote({
@@ -313,7 +327,7 @@ export function Step2Details() {
             type="number"
             min={0}
             placeholder="Leave blank for unlimited"
-            {...register("stockQty", { valueAsNumber: true })}
+            {...register("stockQty", { setValueAs: optionalNumber })}
           />
           <p className="text-xs text-muted-foreground">
             How many of this item do you have? Leave blank for unlimited. Set to <strong>1</strong> if this is a unique item (used laptop, one-of-a-kind).
@@ -342,7 +356,7 @@ export function Step2Details() {
               type="number"
               min={1}
               placeholder="Leave blank for no minimum"
-              {...register("minOrderQty", { valueAsNumber: true })}
+              {...register("minOrderQty", { setValueAs: optionalNumber })}
             />
             <p className="text-xs text-muted-foreground">
               Buyers can't order fewer than this. Separate from bulk pricing tiers.
@@ -404,7 +418,7 @@ export function Step2Details() {
               <Label>Daily Rate (₦)</Label>
               <Input
                 type="number"
-                {...register("priceRentDaily", { valueAsNumber: true })}
+                {...register("priceRentDaily", { setValueAs: optionalNumber })}
                 onBlur={updateDeposit}
               />
               {/* Live fee note for rental */}
@@ -412,12 +426,12 @@ export function Step2Details() {
             </div>
             <div className="space-y-2">
               <Label>Weekly Rate (₦)</Label>
-              <Input type="number" {...register("priceRentWeekly", { valueAsNumber: true })} />
+              <Input type="number" {...register("priceRentWeekly", { setValueAs: optionalNumber })} />
             </div>
           </div>
           <div className="space-y-2">
             <Label>Security Deposit (₦) — Auto: 30%</Label>
-            <Input type="number" {...register("depositAmount", { valueAsNumber: true })} />
+            <Input type="number" {...register("depositAmount", { setValueAs: optionalNumber })} />
           </div>
         </div>
       )}
