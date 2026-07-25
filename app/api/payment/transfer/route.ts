@@ -147,12 +147,48 @@ async function handlePaystackTransfer(params: {
 async function handleFlutterwaveEscrowRelease(params: {
   flwTransactionId: number | string
   reference: string
+  orderId?: string
 }) {
-  const { flwTransactionId, reference } = params
+  const { flwTransactionId, reference, orderId } = params
   const secretKey = process.env.FLW_SECRET_KEY
   if (!secretKey) return NextResponse.json({ error: "FLW_SECRET_KEY not configured" }, { status: 500 })
 
   try {
+    // FIX: idempotency guard. Unlike the Paystack transfer above, Flutterwave
+    // has no cheap "check if this settle already happened" lookup by id alone
+    // (verify_by_reference needs the tx_ref, and escrow/settle itself has no
+    // side-effect-free dry-run). The reliable source of truth we already have
+    // is our own D1 orders row — if escrow_status is already
+    // released_to_seller, a second call here would be a real duplicate
+    // release attempt (admin double-click, a retried request after a slow/
+    // dropped response, etc.), not a legitimate new release. Skip the call
+    // entirely in that case rather than hitting Flutterwave again.
+    if (orderId) {
+      try {
+        const { d1Query } = await import("@/lib/d1")
+        const rows = await d1Query(
+          "SELECT status, escrow_status FROM orders WHERE id = ? LIMIT 1",
+          [orderId],
+        )
+        const order = rows?.results?.[0] as Record<string, unknown> | undefined
+        if (order && String(order.escrow_status ?? "") === "released_to_seller") {
+          return NextResponse.json({
+            success: true,
+            alreadyProcessed: true,
+            transferCode: String(flwTransactionId),
+            transferStatus: "success",
+            reference,
+          })
+        }
+      } catch (err) {
+        // Non-fatal — if the idempotency check itself fails (D1 blip), fall
+        // through and attempt the release rather than blocking it entirely.
+        // Flutterwave's own "not escrow" / already-settled response is the
+        // fallback safety net in that case.
+        console.error("[payment/transfer] idempotency check failed, proceeding with release attempt:", err)
+      }
+    }
+
     const res = await fetch("https://api.ravepay.co/v2/gpx/transactions/escrow/settle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -181,6 +217,7 @@ async function handleFlutterwaveEscrowRelease(params: {
     return NextResponse.json({ success: false, error: err.message || "Escrow release failed" }, { status: 500 })
   }
 }
+
 
 // ── Flutterwave: standalone bank transfer (not tied to a held escrow) ─
 // Used for a plain wallet-balance withdrawal that isn't linked to one
@@ -235,7 +272,7 @@ export async function POST(req: NextRequest) {
   try {
     const {
       provider, amountKobo, accountName, accountNumber, bankCode,
-      reference, reason, escrowTxRef,
+      reference, reason, escrowTxRef, orderId,
     } = await req.json()
 
     if (!reference) {
@@ -246,9 +283,10 @@ export async function POST(req: NextRequest) {
       // If this payout is releasing a specific escrowed order payment,
       // escrowTxRef carries the Flutterwave transaction id captured at
       // verify-time (see verify/route.ts's flwTransactionId) — release it
-      // instead of sending a brand-new transfer.
+      // instead of sending a brand-new transfer. orderId (if the caller has
+      // it) enables the idempotency guard inside handleFlutterwaveEscrowRelease.
       if (escrowTxRef) {
-        return await handleFlutterwaveEscrowRelease({ flwTransactionId: escrowTxRef, reference })
+        return await handleFlutterwaveEscrowRelease({ flwTransactionId: escrowTxRef, reference, orderId })
       }
       if (!amountKobo || !accountNumber || !bankCode) {
         return NextResponse.json({ error: "Missing required transfer fields" }, { status: 400 })
