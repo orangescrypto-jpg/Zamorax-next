@@ -218,6 +218,19 @@ export function ListingForm() {
           {couponsOn && step === couponStepNum && <Step6Coupon />}
           {step === boostStepNum && <Step6Boost />}
           {step === reviewStepNum && <Step7Review />}
+          {/* TEMP DEBUG — remove once the Publish-disabled issue is found.
+              Lists every field react-hook-form currently considers invalid,
+              since dev tools aren't reachable on mobile. */}
+          {step === reviewStepNum && Object.keys(form.formState.errors).length > 0 && (
+            <div className="mt-4 p-3 border-2 border-red-500 rounded bg-red-50 text-sm">
+              <p className="font-bold text-red-700 mb-1">DEBUG — invalid fields:</p>
+              {Object.entries(form.formState.errors).map(([key, err]: [string, any]) => (
+                <p key={key} className="text-red-700">
+                  <strong>{key}</strong>: {String(err?.message || JSON.stringify(err))}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-between mt-8 pt-6 border-t">
