@@ -589,8 +589,8 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           <div className="space-y-1">
             {flashActive && flashPrice != null ? (
               <div className="space-y-0.5">
-                <p className="text-3xl font-extrabold text-red-600">{formatPriceWithUnit(flashPrice, listing.attributes?.unit)}</p>
-                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.attributes?.unit)}</p>
+                <p className="text-3xl font-extrabold text-red-600">{formatPriceWithUnit(flashPrice, listing.unitOfSale)}</p>
+                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
                 {flashCountdown && (
                   <div className="flex items-center gap-1.5 text-sm text-red-600 font-semibold bg-red-50 rounded-lg px-2.5 py-1.5 w-fit">
                     <Flame className="h-3.5 w-3.5" />
@@ -600,18 +600,24 @@ export function ListingDetailClient({ id, initialListing }: Props) {
               </div>
             ) : appliedCoupon && couponPrice != null ? (
               <div className="space-y-0.5">
-                <p className="text-3xl font-extrabold text-orange-600">{formatPriceWithUnit(couponPrice, listing.attributes?.unit)}</p>
-                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.attributes?.unit)}</p>
+                <p className="text-3xl font-extrabold text-orange-600">{formatPriceWithUnit(couponPrice, listing.unitOfSale)}</p>
+                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
                 <div className="flex items-center gap-1.5 text-sm text-orange-600 font-semibold bg-orange-50 rounded-lg px-2.5 py-1.5 w-fit">
                   <Tag className="h-3.5 w-3.5" />
                   Code {appliedCoupon.code} applied — {appliedCoupon.discountPercent}% off
                 </div>
               </div>
             ) : (
-              <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(listing.priceSale, listing.attributes?.unit)}</p>
+              <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
             )}
             {listing.listingType !== "sale" && listing.priceRentDaily && (
               <p className="text-sm text-muted-foreground">or {formatPrice(listing.priceRentDaily)} / day</p>
+            )}
+            {/* FIX: priceRentWeekly was collected in Step2 and saved, but
+                nothing on this page ever displayed it — only the daily
+                rate showed. */}
+            {listing.listingType !== "sale" && listing.priceRentWeekly && (
+              <p className="text-sm text-muted-foreground">or {formatPrice(listing.priceRentWeekly)} / week</p>
             )}
           </div>
 
@@ -679,6 +685,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
               Previously this sat near the bottom of the page, after the
               entire buy-action funnel, which meant scrolling past all of
               that just to read what the item actually is. */}
+          {/* TEMP DEBUG */}
+          <div className="border-2 border-red-500 bg-red-50 p-2 text-xs text-red-700 break-all">
+            DEBUG attributes: {JSON.stringify(listing.attributes)}
+          </div>
+
           {listing.description && (
             <div className="border-t border-border pt-4 space-y-2">
               <h2 className="font-semibold text-sm text-foreground">Description</h2>
