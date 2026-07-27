@@ -685,11 +685,6 @@ export function ListingDetailClient({ id, initialListing }: Props) {
               Previously this sat near the bottom of the page, after the
               entire buy-action funnel, which meant scrolling past all of
               that just to read what the item actually is. */}
-          {/* TEMP DEBUG */}
-          <div className="border-2 border-red-500 bg-red-50 p-2 text-xs text-red-700 break-all">
-            DEBUG attributes: {JSON.stringify(listing.attributes)}
-          </div>
-
           {listing.description && (
             <div className="border-t border-border pt-4 space-y-2">
               <h2 className="font-semibold text-sm text-foreground">Description</h2>
