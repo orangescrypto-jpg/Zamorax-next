@@ -22,7 +22,11 @@ export function formatPrice(kobo: number): string {
 // this is safe to call for every listing regardless of category.
 export function formatPriceWithUnit(kobo: number, unit?: string | null): string {
   const base = formatPrice(kobo)
-  if (!unit) return base
+  // "piece" is the default for single-item listings — showing "/ piece" on
+  // every price would be noise. Bulk-goods units (bag, carton, kg, etc.)
+  // are the ones that actually help buyers understand what they're paying
+  // for.
+  if (!unit || unit === "piece") return base
   // Attribute values look like "Per kg", "Per bag (50kg)", "Bags", "Tonnes" —
   // normalize to a short trailing suffix like "/ kg" or "/ bag (50kg)".
   const cleaned = unit.replace(/^per\s+/i, "").trim()
