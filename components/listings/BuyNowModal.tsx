@@ -543,14 +543,14 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1 }: Pr
                   </div>
 
                   {/* Notice only — third-party (non-Zamorax-Direct) orders
-                      over 100k are recommended to use manual transfer.
+                      over 50k are recommended to use manual transfer.
                       Nothing is actually restricted; the buyer can still
                       pick any enabled method below. Zamorax Direct
                       purchases (seller.isOfficial) never show this. */}
-                  {!seller?.isOfficial && breakdown.buyerTotalKobo > 100_000 * 100 && (
+                  {!seller?.isOfficial && breakdown.buyerTotalKobo > 50_000 * 100 && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                       <p className="text-xs text-amber-800">
-                        For orders above ₦100,000 from third-party sellers, we recommend paying via <strong>Bank Transfer (Manual)</strong> for added safety.
+                        For orders above ₦50,000 from third-party sellers, we recommend paying via <strong>Bank Transfer (Manual)</strong> for added safety.
                       </p>
                     </div>
                   )}
