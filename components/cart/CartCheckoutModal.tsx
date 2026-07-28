@@ -214,6 +214,8 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
             agreedPrice: i.agreedPrice,
             offerId:     i.offerId ?? null,
             couponCode:  i.couponCode ?? null,
+            selectedColor: i.selectedColor ?? null,
+            selectedSize:  i.selectedSize ?? null,
           })),
           deliveryMethod: delivery.method,
           deliveryFee:    delivery.fee,
@@ -479,7 +481,11 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         {items.map((item: any) => (
                           <div key={item.listingId} className="flex items-center justify-between text-xs text-muted-foreground">
                             <span className="line-clamp-1 flex-1 pr-2">
-                              {item.listingTitle} ×{item.quantity}
+                              {item.listingTitle}
+                              {(item.selectedColor || item.selectedSize) && (
+                                <span className="text-muted-foreground/70"> ({[item.selectedColor, item.selectedSize].filter(Boolean).join(", ")})</span>
+                              )}
+                              {" "}×{item.quantity}
                               {item.couponCode && (
                                 <span className="ml-1.5 inline-flex items-center text-[10px] font-medium text-orange-700 bg-orange-50 border border-orange-100 rounded px-1 py-0.5">
                                   {item.couponCode}
