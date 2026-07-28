@@ -97,7 +97,19 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         city: form.city.trim(),
         nigerianState: form.nigerianState,
         deliveryNationwide: form.deliveryNationwide,
-        stockQty: form.stockQty !== "" ? parseInt(form.stockQty) : undefined,
+        // Used/graded items are implicitly one-of-a-kind unless the seller
+        // says otherwise — mirrors the same default applied at creation
+        // time (see ListingForm/index.tsx). Only kicks in when stockQty
+        // has never been set at all (listing.stockQty is null/undefined);
+        // if it's already 0 (out of stock) or any other number, that's a
+        // deliberate value and this leaves it untouched.
+        stockQty: form.stockQty !== ""
+          ? parseInt(form.stockQty)
+          : (
+              ["grade_a", "grade_b", "open_box"].includes(form.condition) && listing?.stockQty == null
+                ? 1
+                : undefined
+            ),
         estimatedDeliveryDays: form.estimatedDeliveryDays.trim() || undefined,
         minOrderQty: form.minOrderQty.trim() !== "" ? parseInt(form.minOrderQty) : undefined,
         unitOfSale: form.unitOfSale || "piece",
