@@ -137,10 +137,14 @@ export const useCartItemsStore = create<CartItemsState>()(
                 // quantity to 1 in that case rather than adding to whatever
                 // was already in the cart. Otherwise (regular re-add),
                 // accumulate as before, clamped between the listing's min
-                // and max order qty.
+                // and max order qty. Also clamp against the listing's real
+                // stock (if tracked) — accumulating two adds of a
+                // single-unit item must never push quantity above 1.
+                const stockCeiling = (item.stockQty ?? c.stockQty) ?? undefined
+                const effectiveMax = stockCeiling != null ? Math.min(maxQtyPerItem, stockCeiling) : maxQtyPerItem
                 const nextQty = item.agreedPrice != null
                   ? 1
-                  : Math.min(Math.max(c.quantity + item.quantity, minQtyPerItem), maxQtyPerItem)
+                  : Math.min(Math.max(c.quantity + item.quantity, minQtyPerItem), effectiveMax)
 
                 // Refresh bulk-pricing fields from the latest add (seller
                 // may have changed tiers) and re-resolve the unit price at
@@ -155,6 +159,7 @@ export const useCartItemsStore = create<CartItemsState>()(
                   bulkPricing: item.bulkPricing ?? c.bulkPricing,
                   basePriceSale: item.basePriceSale ?? c.basePriceSale,
                   minOrderQty: item.minOrderQty ?? c.minOrderQty,
+                  stockQty: stockCeiling,
                 }
                 return merged.agreedPrice != null
                   ? merged
@@ -162,9 +167,10 @@ export const useCartItemsStore = create<CartItemsState>()(
               }),
             }
           }
+          const initialMax = item.stockQty != null ? Math.min(maxQtyPerItem, item.stockQty) : maxQtyPerItem
           const initialQty = item.agreedPrice != null
             ? 1
-            : Math.min(Math.max(item.quantity, minQtyPerItem), maxQtyPerItem)
+            : Math.min(Math.max(item.quantity, minQtyPerItem), initialMax)
           return {
             cartItems: [
               ...s.cartItems,
@@ -197,7 +203,13 @@ export const useCartItemsStore = create<CartItemsState>()(
                   // the true floor — callers may also pass one explicitly,
                   // so respect whichever is stricter.
                   const floor = Math.max(minQtyPerItem, c.minOrderQty ?? 1)
-                  const nextQty = Math.max(qty, floor)
+                  // The listing's own stock (if tracked) is a hard ceiling
+                  // enforced here in the store, not just via a disabled
+                  // button in the drawer UI — a single-unit item
+                  // (stockQty = 1) must never end up with quantity > 1 in
+                  // the cart no matter how updateQty gets called.
+                  const ceiling = c.stockQty != null ? Math.max(floor, c.stockQty) : Infinity
+                  const nextQty = Math.min(Math.max(qty, floor), ceiling)
                   // Offer-priced items have a fixed negotiated total for a
                   // fixed quantity — never re-resolve or let qty drift.
                   if (c.agreedPrice != null) return { ...c, quantity: nextQty }
