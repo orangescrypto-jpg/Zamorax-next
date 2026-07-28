@@ -73,6 +73,14 @@ export async function GET(req: NextRequest) {
             order_id:    orderId,
             status:      "completed",
           })
+          // FIX: same missing total_sales increment as confirm-delivery —
+          // without this, sellers whose escrow only ever auto-releases
+          // (buyer never manually confirms) permanently show 0 sales.
+          const sellerUser = await AdminService.getDoc("users", sellerId) as Record<string, unknown> | null
+          await AdminService.setDoc("users", sellerId, {
+            total_sales: Number(sellerUser?.total_sales ?? sellerUser?.totalSales ?? 0) + 1,
+            updated_at:  now,
+          }, { merge: true })
         }
 
         if (buyerId) {
