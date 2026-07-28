@@ -421,6 +421,30 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span className="text-muted-foreground">Item</span>
             <span className="font-medium truncate ml-4">{order.itemTitle}</span>
           </div>
+          {/* Fashion variant — Buy Now orders carry the selection on the
+              order itself. Cart orders (multi-item) show it per line below
+              instead, since each line can be a different color/size. */}
+          {(!order.lineItems || order.lineItems.length <= 1) && (order.selectedColor || order.selectedSize) && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Option</span>
+              <span className="font-medium">{[order.selectedColor, order.selectedSize].filter(Boolean).join(" · ")}</span>
+            </div>
+          )}
+          {order.lineItems && order.lineItems.length > 1 && (
+            <div className="space-y-1 border-t border-border pt-2">
+              {order.lineItems.map((li, i) => (
+                <div key={i} className="flex justify-between text-xs">
+                  <span className="text-muted-foreground truncate pr-2">
+                    {li.title}
+                    {(li.selectedColor || li.selectedSize) && (
+                      <span className="text-muted-foreground/70"> ({[li.selectedColor, li.selectedSize].filter(Boolean).join(", ")})</span>
+                    )}
+                  </span>
+                  <span className="font-medium shrink-0">× {li.qty}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Type</span>
             <span className="capitalize">{order.orderType || "purchase"}</span>
