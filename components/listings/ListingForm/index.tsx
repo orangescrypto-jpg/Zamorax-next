@@ -139,9 +139,18 @@ export function ListingForm() {
         ? data.shippingMethods
         : ["meetup"]
 
+      // Used/graded items (grade_a, grade_b, open_box) are implicitly
+      // one-of-a-kind unless the seller explicitly says otherwise — a
+      // used HP laptop can't actually be "in stock: 10". Brand-new items
+      // genuinely can be unlimited/untracked (the null default), so this
+      // only applies to the used-condition tiers. This is also what
+      // makes the cart's per-item quantity cap actually bite for these
+      // listings — leaving stockQty null lets a buyer add 10 of a
+      // single physical used item to their cart.
+      const isUsedCondition = data.condition === "grade_a" || data.condition === "grade_b" || data.condition === "open_box"
       const stockQty = (data.stockQty != null && !isNaN(data.stockQty))
         ? Math.max(0, Math.floor(data.stockQty))
-        : null
+        : (isUsedCondition ? 1 : null)
 
       // FIX: use exact D1 column names so addDoc/setDoc auto-converter doesn't
       // produce wrong snake_case (e.g. categorySlug → category_slug which doesn't exist)
