@@ -402,6 +402,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
       basePriceSale:  isOfferPriced ? undefined : listing.priceSale,
       bulkPricing:    isOfferPriced ? undefined : (listing.bulkPricing ?? undefined),
       minOrderQty:    listing.minOrderQty ?? undefined,
+      stockQty:       listing.stockQty ?? undefined,
       agreedPrice:    acceptedOffer?.agreedPrice,
       offerId:        acceptedOffer?.offerId ?? null,
       couponCode:     (!flashActive && appliedCoupon) ? appliedCoupon.code : undefined,
