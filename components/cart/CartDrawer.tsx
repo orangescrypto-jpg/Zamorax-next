@@ -112,6 +112,12 @@ export function CartDrawer({ open, onClose }: Props) {
                         <div className="flex-1 min-w-0 space-y-1">
                           <p className="text-xs font-medium text-foreground line-clamp-2 leading-snug">{item.listingTitle}</p>
 
+                          {(item.selectedColor || item.selectedSize) && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {[item.selectedColor, item.selectedSize].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+
                           {item.agreedPrice != null && (
                             <span className="inline-block bg-green-100 text-green-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">
                               Negotiated ✓
