@@ -10,7 +10,7 @@ import { X, ShoppingCart, Minus, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { usePlatformSettings } from "@/hooks/usePlatformSettings"
 import { useCartItemsStore } from "@/store/cartStore"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, resolveBulkPrice } from "@/lib/utils"
 import { CartCheckoutModal } from "@/components/cart/CartCheckoutModal"
 import type { CartItem } from "@/src/types"
 
@@ -92,8 +92,17 @@ export function CartDrawer({ open, onClose }: Props) {
 
                   {sellerItems.map((item: CartItem) => {
                     const displayPrice = item.agreedPrice ?? item.priceSale
-                    const lineTotal    = displayPrice * item.quantity
+                    // Exact-tier bulk prices are flat bundle totals, not
+                    // unit×qty — resolve directly here too so the line total
+                    // shown never drifts by a few kobo from re-deriving a
+                    // unit rate. Falls back to the plain multiply for
+                    // non-bulk / offer-priced items.
+                    const bulkResolved = item.agreedPrice == null && item.bulkPricing && item.basePriceSale != null
+                      ? resolveBulkPrice(item.bulkPricing, item.basePriceSale, item.quantity)
+                      : null
+                    const lineTotal    = bulkResolved ? bulkResolved.total : displayPrice * item.quantity
                     const maxQty       = settings.maxQtyPerItem ?? 10
+                    const minQty       = item.minOrderQty ?? 1
 
                     return (
                       <div key={item.listingId} className="flex gap-3 p-2.5 rounded-xl border border-border bg-card">
@@ -128,15 +137,16 @@ export function CartDrawer({ open, onClose }: Props) {
                             {/* Qty control */}
                             <div className="flex items-center gap-1">
                               <button
-                                onClick={() => updateQty(item.listingId, item.quantity - 1)}
-                                className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition text-foreground"
+                                onClick={() => updateQty(item.listingId, item.quantity - 1, minQty)}
+                                disabled={item.agreedPrice != null || item.quantity <= minQty}
+                                className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition text-foreground disabled:opacity-40"
                               >
                                 <Minus className="h-2.5 w-2.5" />
                               </button>
                               <span className="text-xs font-semibold w-5 text-center">{item.quantity}</span>
                               <button
-                                onClick={() => updateQty(item.listingId, item.quantity + 1)}
-                                disabled={item.quantity >= maxQty}
+                                onClick={() => updateQty(item.listingId, item.quantity + 1, minQty)}
+                                disabled={item.agreedPrice != null || item.quantity >= maxQty}
                                 className="w-6 h-6 rounded-md border border-border flex items-center justify-center hover:bg-muted transition text-foreground disabled:opacity-40"
                               >
                                 <Plus className="h-2.5 w-2.5" />
