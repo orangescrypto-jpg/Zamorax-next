@@ -52,12 +52,19 @@ interface Props {
     nigerianState?: string
   }
   // Quantity the buyer selected on the listing page (bulk-pricing tiles or
-  // the +/- stepper). listing.priceSale is already the resolved PER-UNIT
-  // price for that quantity (e.g. the ≥5-pieces bulk rate) — this modal is
-  // responsible for multiplying it out to the actual total charged.
+  // the +/- stepper). listing.priceSale is treated as the PER-UNIT price
+  // for that quantity UNLESS resolvedTotal is passed (see below).
   // Defaults to 1 for any caller that doesn't pass it, preserving old
   // single-unit behavior.
   quantity?: number
+  // Exact TOTAL to charge for `quantity` units, when the caller has already
+  // resolved bulk-tier pricing (see resolveBulkPrice in lib/utils). At an
+  // exact tier this is a flat bundle price, not necessarily quantity ×
+  // (some per-unit rate) — passing it directly avoids the modal re-deriving
+  // a unit price and multiplying it back out, which can drift by a few
+  // kobo whenever a tier's total doesn't divide evenly by its minQty.
+  // Ignored when an accepted offer applies (offer total always wins).
+  resolvedTotal?: number
   // Fashion variant the buyer picked on the listing page, if the listing
   // had more than one color/size option (see ListingDetailClient's variant
   // picker). Carried into the order so the seller knows what to ship.
@@ -70,7 +77,7 @@ interface Props {
   } | null
 }
 
-export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, selectedColor, selectedSize }: Props) {
+export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, resolvedTotal, selectedColor, selectedSize }: Props) {
   const { user }     = useAuth()
   const router       = useRouter()
   const { toast }    = useToast()
@@ -132,9 +139,16 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, sele
   // (default 1, for legacy single-unit offers) — it does not scale with
   // whatever quantity the listing page passed in, since that price was
   // already fixed during negotiation for a specific quantity.
+  //
+  // Otherwise, prefer the caller's exact resolvedTotal (bulk-tier aware)
+  // over deriving one here — re-multiplying a per-unit price that was
+  // itself rounded from a tier total can drift by a few kobo whenever the
+  // tier's total doesn't divide evenly by its minQty.
   const effectiveQty  = acceptedOffer ? Math.max(1, acceptedOffer.quantity ?? 1) : Math.max(1, quantity)
   const unitPriceKobo = acceptedOffer ? Math.round(acceptedOffer.agreedPrice / effectiveQty) : listing.priceSale
-  const itemPriceKobo = acceptedOffer ? acceptedOffer.agreedPrice : unitPriceKobo * effectiveQty
+  const itemPriceKobo = acceptedOffer
+    ? acceptedOffer.agreedPrice
+    : resolvedTotal != null ? resolvedTotal : unitPriceKobo * effectiveQty
   const breakdown     = calculateFees(itemPriceKobo, "sale", fees)
 
   const sellerDisplayName =
@@ -197,7 +211,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, sele
               itemPrice:       itemPriceKobo,
               isOfferOrder:    !!acceptedOffer,
               offerId:         acceptedOffer?.offerId ?? null,
-              originalPrice:   listing.priceSale * effectiveQty,
+              originalPrice:   itemPriceKobo,
               // Reuse the cart order's lineItems field for a single-item
               // Buy Now purchase too — this is how SellerOrderCard (and any
               // future order-detail UI) learns the actual quantity ordered,
@@ -274,7 +288,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, sele
           itemPrice:       itemPriceKobo,
           isOfferOrder:    !!acceptedOffer,
           offerId:         acceptedOffer?.offerId ?? null,
-          originalPrice:   listing.priceSale * effectiveQty,
+          originalPrice:   itemPriceKobo,
           lineItems: [{
             listingId:  listing.id,
             title:      listing.title,
