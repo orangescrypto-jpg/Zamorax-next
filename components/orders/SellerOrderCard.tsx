@@ -197,6 +197,16 @@ export function SellerOrderCard({ order, onSuccess }: { order: Order; onSuccess?
               )}
             </div>
 
+            {/* Fashion variant — single-listing orders (Buy Now) carry the
+                selection on the order itself; cart orders carry it per line
+                item below instead, so this only applies when there's just
+                one line (or none, i.e. a Buy Now order). */}
+            {!hasMultipleLines && (order.selectedColor || order.selectedSize) && (
+              <p className="text-xs text-muted-foreground">
+                {[order.selectedColor, order.selectedSize].filter(Boolean).join(" · ")}
+              </p>
+            )}
+
             {/* Multiple different listings in this order — break out each
                 one's title and quantity so the seller knows exactly what
                 was ordered and in what amount, instead of one blended total. */}
@@ -205,6 +215,9 @@ export function SellerOrderCard({ order, onSuccess }: { order: Order; onSuccess?
                 {lineItems.map((li, i) => (
                   <p key={i} className="text-xs text-muted-foreground truncate">
                     {li.title || "Item"} <span className="font-semibold text-foreground">× {li.qty}</span>
+                    {(li.selectedColor || li.selectedSize) && (
+                      <span className="text-muted-foreground/70"> ({[li.selectedColor, li.selectedSize].filter(Boolean).join(", ")})</span>
+                    )}
                   </p>
                 ))}
               </div>
