@@ -210,6 +210,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
         ],
         nativeDB,
       )
+
+      // FIX: total_sales on the seller's own user row was never incremented
+      // on order completion anywhere in the codebase — the wallet got
+      // credited correctly, but "0 sales" kept showing on the listing page
+      // and the trust score's order-count points never accrued, for every
+      // seller regardless of how many orders they'd actually completed.
+      await d1Query(
+        `UPDATE users SET total_sales = COALESCE(total_sales, 0) + 1, updated_at = ? WHERE id = ?`,
+        [now, sellerId],
+        nativeDB,
+      )
     }
 
     // Referral bonus — pays out the first time a referred seller's first
