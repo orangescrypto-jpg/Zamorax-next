@@ -236,6 +236,7 @@ export async function POST(req: NextRequest) {
               delivery_method: orderDraft.deliveryMethod ?? "meetup",
               seller_state: orderDraft.sellerState ?? "", buyer_state: orderDraft.buyerState ?? "",
               item_price: orderDraft.itemPrice ?? 0,
+              selected_color: orderDraft.selectedColor ?? null, selected_size: orderDraft.selectedSize ?? null,
               status: "escrow_held", escrow_status: "held", escrow_held_at: new Date().toISOString(),
               order_type: "purchase", payment_reference: reference, payment_provider: "flutterwave",
               flw_transaction_id: flwTransactionId,
