@@ -101,7 +101,17 @@ export function CartDrawer({ open, onClose }: Props) {
                       ? resolveBulkPrice(item.bulkPricing, item.basePriceSale, item.quantity)
                       : null
                     const lineTotal    = bulkResolved ? bulkResolved.total : displayPrice * item.quantity
-                    const maxQty       = settings.maxQtyPerItem ?? 10
+                    // FIX: this previously only used the platform-wide
+                    // maxQtyPerItem default (e.g. 10), with no idea of the
+                    // listing's actual stock — so a single-unit item
+                    // (stockQty = 1) could still be bumped to 10 in the
+                    // drawer, even though the listing page itself correctly
+                    // hides its own stepper for anything with stockQty < 2.
+                    // Mirrors the same stock-capping logic used there.
+                    const platformMaxQty = settings.maxQtyPerItem ?? 10
+                    const maxQty       = item.stockQty != null
+                      ? Math.min(platformMaxQty, item.stockQty)
+                      : platformMaxQty
                     const minQty       = item.minOrderQty ?? 1
 
                     return (
