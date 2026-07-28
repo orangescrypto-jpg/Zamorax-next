@@ -8,7 +8,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
-import { formatPrice, formatPriceWithUnit } from "@/lib/utils"
+import { formatPrice, formatPriceWithUnit, resolveBulkPrice } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -339,26 +339,12 @@ export function ListingDetailClient({ id, initialListing }: Props) {
   // consistent instead of the flash price ever being pricier than a bulk
   // tier (or vice versa). Tiers are scaled at read time only; the stored
   // bulkPricing data itself is never rewritten.
-  const resolvedBulkPrice = (() => {
-    if (!listing?.bulkPricing || listing.bulkPricing.length === 0) return null
-    const tiers = [...listing.bulkPricing]
-      .sort((a: { minQty: number }, b: { minQty: number }) => a.minQty - b.minQty)
-      .map((t: { minQty: number; price: number }) => ({
-        minQty: t.minQty,
-        price: flashActive && listing.flashDeal
-          ? ListingsService.getFlashPrice(t.price, listing.flashDeal.discountPercent)
-          : t.price,
-      }))
-    const exactTier = tiers.find((t: { minQty: number }) => t.minQty === quantity)
-    if (exactTier) return { total: exactTier.price, isExactTier: true }
-
-    const crossed = tiers.filter((t: { minQty: number }) => quantity > t.minQty)
-    if (crossed.length === 0) return null // below first tier — caller uses base price × qty
-
-    const lastCrossed = crossed[crossed.length - 1]
-    const perPieceRate = lastCrossed.price / lastCrossed.minQty
-    return { total: Math.round(perPieceRate * quantity), isExactTier: false }
-  })()
+  const resolvedBulkPrice = resolveBulkPrice(
+    listing?.bulkPricing,
+    listing?.priceSale ?? 0,
+    quantity,
+    flashActive && listing?.flashDeal ? listing.flashDeal.discountPercent : null
+  )
   // Per-unit price for display purposes only (e.g. price cards, cart line
   // items that expect a unit price rather than a resolved total). Not used
   // for the actual charge total — that's resolvedBulkPrice.total above,
@@ -408,6 +394,14 @@ export function ListingDetailClient({ id, initialListing }: Props) {
       // bulk quantity would get charged the 1-piece flash price instead
       // of their (also-discounted) bulk rate.
       priceSale:      couponPrice ?? (isOfferPriced ? listing.priceSale : (bulkUnitPrice ?? flashPrice ?? listing.priceSale)),
+      // Passed through so the cart can re-resolve the correct total/unit
+      // price whenever quantity changes in the drawer, instead of being
+      // stuck with the per-unit rate captured at this exact quantity.
+      // Omitted entirely for offer-priced items — a negotiated price is
+      // fixed regardless of any bulk tiers.
+      basePriceSale:  isOfferPriced ? undefined : listing.priceSale,
+      bulkPricing:    isOfferPriced ? undefined : (listing.bulkPricing ?? undefined),
+      minOrderQty:    listing.minOrderQty ?? undefined,
       agreedPrice:    acceptedOffer?.agreedPrice,
       offerId:        acceptedOffer?.offerId ?? null,
       couponCode:     (!flashActive && appliedCoupon) ? appliedCoupon.code : undefined,
@@ -1247,7 +1241,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           listing={{
             id:            listing.id,
             title:         listing.title,
-            priceSale:     flashPrice ?? couponPrice ?? bulkUnitPrice ?? listing.priceSale,
+            // Per-unit price for display only — the modal uses
+            // resolvedTotal below as the actual charge whenever bulk
+            // pricing applies, so this ordering no longer needs to matter
+            // for the total, only for what's shown per-unit in the modal.
+            priceSale:     couponPrice ?? bulkUnitPrice ?? flashPrice ?? listing.priceSale,
             images:        listing.images,
             sellerId:      listing.sellerId,
             sellerName:    seller?.storeName || seller?.fullName,
@@ -1262,6 +1260,13 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           // silently charged for 1 unit at the bulk per-piece rate no
           // matter what quantity was selected).
           quantity={acceptedOffer ? Math.max(1, acceptedOffer.quantity ?? 1) : quantity}
+          // Exact resolved total when a bulk tier applies (flat bundle
+          // price at an exact tier, or the correctly-rounded between-tier
+          // total) — avoids the modal re-deriving and re-multiplying a
+          // unit price, which can drift by a few kobo. Coupon/flash-only
+          // (no bulk tiers) cases fall back to undefined, so the modal's
+          // own unitPriceKobo × quantity applies unchanged.
+          resolvedTotal={!acceptedOffer && resolvedBulkPrice ? resolvedBulkPrice.total : undefined}
           seller={seller}
           selectedColor={selectedColor}
           selectedSize={selectedSize}
