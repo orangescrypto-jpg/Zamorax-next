@@ -216,8 +216,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
       // credited correctly, but "0 sales" kept showing on the listing page
       // and the trust score's order-count points never accrued, for every
       // seller regardless of how many orders they'd actually completed.
+      // NOTE: users' primary key column is `uid`, not `id` (see
+      // migrations/0001_baseline_schema.sql) — this must match or the
+      // UPDATE silently affects 0 rows, same class of bug flagged above
+      // for seller_wallets' `user_id` PK.
       await d1Query(
-        `UPDATE users SET total_sales = COALESCE(total_sales, 0) + 1, updated_at = ? WHERE id = ?`,
+        `UPDATE users SET total_sales = COALESCE(total_sales, 0) + 1, updated_at = ? WHERE uid = ?`,
         [now, sellerId],
         nativeDB,
       )
