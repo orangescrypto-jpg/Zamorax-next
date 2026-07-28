@@ -90,6 +90,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
   const [buyNowOpen,   setBuyNowOpen]   = useState(false)
   const [reportOpen,   setReportOpen]   = useState(false)
   const [quantity,     setQuantity]     = useState(1)
+  // Fashion variant selection — only relevant when listing.attributes.colors
+  // / .sizes have more than one option (set via the multi-select chips in
+  // FashionAttr.tsx at listing creation). null until the buyer picks one.
+  const [selectedColor, setSelectedColor] = useState<string | null>(null)
+  const [selectedSize,  setSelectedSize]  = useState<string | null>(null)
   const searchParams = useSearchParams()
 
   // Coupon code — buyer types the seller's code, we validate it against
@@ -190,6 +195,16 @@ export function ListingDetailClient({ id, initialListing }: Props) {
   // which would otherwise make the quantity selector unusable.
   const minQty         = Math.min(Math.max(listing?.minOrderQty ?? 1, 1), maxQty)
   const showQtySelector = settings.multiCartEnabled && hasLimitedStock && stockQty >= 2
+
+  // Fashion variants — attributes.colors / attributes.sizes are only ever
+  // set as arrays by FashionAttr.tsx (see Step3Attributes). A single-option
+  // array (e.g. just ["Black"]) isn't a real choice, so the picker only
+  // shows and only becomes required when there's more than one option.
+  const availableColors: string[] = Array.isArray(listing?.attributes?.colors) ? listing.attributes.colors : []
+  const availableSizes:  string[] = Array.isArray(listing?.attributes?.sizes)  ? listing.attributes.sizes  : []
+  const needsColorSelection = availableColors.length > 1
+  const needsSizeSelection  = availableSizes.length > 1
+  const variantSelectionMissing = (needsColorSelection && !selectedColor) || (needsSizeSelection && !selectedSize)
 
   // Vacation mode
   const onVacation    = listing?.vacationMode === true
@@ -355,6 +370,15 @@ export function ListingDetailClient({ id, initialListing }: Props) {
   const handleAddToCart = useCallback(() => {
     if (!user?.uid) { gotoLogin(); return }
     if (!listing || isOutOfStock || onVacation) return
+    if (variantSelectionMissing) {
+      toast({
+        title: "Select an option",
+        description: [needsColorSelection && !selectedColor ? "color" : null, needsSizeSelection && !selectedSize ? "size" : null]
+          .filter(Boolean).join(" and "),
+        variant: "destructive",
+      })
+      return
+    }
 
     const currentItems = getCartItems()
     if (currentItems.length >= (settings.maxCartItems ?? 20)) {
@@ -391,6 +415,8 @@ export function ListingDetailClient({ id, initialListing }: Props) {
       shippingMethods: listing.shippingMethods ?? ["meetup"],
       weightKg:       listing.weightKg,
       isFragile:      listing.isFragile,
+      selectedColor:  selectedColor ?? undefined,
+      selectedSize:   selectedSize ?? undefined,
       addedAt:        new Date().toISOString(),
     }, settings.maxQtyPerItem ?? 10, isOfferPriced ? 1 : minQty)
 
@@ -401,7 +427,24 @@ export function ListingDetailClient({ id, initialListing }: Props) {
         : listing.title,
       variant: "success",
     })
-  }, [listing, seller, user?.uid, quantity, minQty, flashPrice, bulkUnitPrice, isOutOfStock, onVacation, settings, addToCart, getCartItems, router, toast, acceptedOffer])
+  }, [listing, seller, user?.uid, quantity, minQty, flashPrice, bulkUnitPrice, isOutOfStock, onVacation, settings, addToCart, getCartItems, router, toast, acceptedOffer, variantSelectionMissing, needsColorSelection, needsSizeSelection, selectedColor, selectedSize])
+
+  // Shared by both Buy Now buttons (desktop panel + mobile sticky bar) —
+  // same variant guard as Add to Cart, so a buyer can't skip straight to
+  // checkout without picking a color/size when the listing requires one.
+  const handleBuyNowClick = useCallback(() => {
+    if (!user?.uid) { gotoLogin(); return }
+    if (variantSelectionMissing) {
+      toast({
+        title: "Select an option",
+        description: [needsColorSelection && !selectedColor ? "color" : null, needsSizeSelection && !selectedSize ? "size" : null]
+          .filter(Boolean).join(" and "),
+        variant: "destructive",
+      })
+      return
+    }
+    setBuyNowOpen(true)
+  }, [user?.uid, variantSelectionMissing, needsColorSelection, needsSizeSelection, selectedColor, selectedSize, toast, gotoLogin])
 
   const handleChat = async (targetSellerId?: string, targetSellerName?: string) => {
     if (!user?.uid) { gotoLogin(); return }
@@ -708,7 +751,14 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                 {Object.entries(listing.attributes)
                   .filter(([key, value]) => {
                     if (key === "unit") return false // internal, used for price formatting only
+                    // colors/sizes are multi-select arrays surfaced via the
+                    // dedicated variant picker above (color swatches / size
+                    // chips), not as a plain spec row — showing both would
+                    // be redundant and the array would print as "Black,Red"
+                    // here anyway since this list only handles scalars.
+                    if (key === "colors" || key === "sizes") return false
                     if (value === undefined || value === null || value === "") return false
+                    if (Array.isArray(value) && value.length === 0) return false
                     return true
                   })
                   .map(([key, value]) => (
@@ -716,7 +766,9 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                       <dt className="text-muted-foreground capitalize">
                         {key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim()}
                       </dt>
-                      <dd className="text-foreground font-medium">{String(value)}</dd>
+                      <dd className="text-foreground font-medium">
+                        {Array.isArray(value) ? value.join(", ") : String(value)}
+                      </dd>
                     </div>
                   ))}
               </dl>
@@ -835,6 +887,60 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           )}
 
 
+          {/* Fashion variant picker — colors/sizes only show up here when the
+              listing was created with more than one option selected (see
+              FashionAttr.tsx). Selection is required before Add to Cart /
+              Buy Now when there's a real choice to make. */}
+          {!isSeller && !isOutOfStock && !onVacation && needsColorSelection && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">
+                Color{selectedColor ? `: ${selectedColor}` : ""}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {availableColors.map(color => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setSelectedColor(color)}
+                    aria-pressed={selectedColor === color}
+                    className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+                      selectedColor === color
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {color}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!isSeller && !isOutOfStock && !onVacation && needsSizeSelection && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">
+                Size{selectedSize ? `: ${selectedSize}` : ""}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {availableSizes.map(size => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setSelectedSize(size)}
+                    aria-pressed={selectedSize === size}
+                    className={`min-w-[2.75rem] px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                      selectedSize === size
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Qty selector — only for multi-cart mode with limited stock */}
           {showQtySelector && !isSeller && !isOutOfStock && !onVacation && (
             <div className="flex items-center gap-3">
@@ -907,10 +1013,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                       <Button
                         variant="outline"
                         className="h-11 border-primary text-primary hover:bg-primary/5"
-                        onClick={() => {
-                          if (!user?.uid) { gotoLogin(); return }
-                          setBuyNowOpen(true)
-                        }}
+                        onClick={handleBuyNowClick}
                         disabled={isOutOfStock || onVacation}
                       >
                         Buy Now
@@ -1160,6 +1263,8 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           // matter what quantity was selected).
           quantity={acceptedOffer ? Math.max(1, acceptedOffer.quantity ?? 1) : quantity}
           seller={seller}
+          selectedColor={selectedColor}
+          selectedSize={selectedSize}
         />
       )}
 
@@ -1218,10 +1323,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
           {(listing.listingType === "sale" || listing.listingType === "both") && (
             <Button
               className="flex-1 h-auto bg-primary text-white hover:bg-primary/90"
-              onClick={() => {
-                if (!user?.uid) { gotoLogin(); return }
-                setBuyNowOpen(true)
-              }}
+              onClick={handleBuyNowClick}
               disabled={isOutOfStock || onVacation}
             >
               Buy Now
