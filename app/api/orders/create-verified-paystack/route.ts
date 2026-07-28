@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       listingId, itemTitle, itemImage, totalAmount, platformFee, sellerPayout,
       deliveryStreet, deliveryCity, deliveryState, deliveryLGA, deliveryMethod,
       sellerState, buyerState, itemPrice, isOfferOrder, offerId, originalPrice,
-      lineItems,
+      lineItems, selectedColor, selectedSize,
     } = orderDraft
 
     // Quantity ordered — from lineItems[0].qty (set by BuyNowModal from the
@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
       seller_state: sellerState ?? "", buyer_state: buyerState ?? "",
       item_price: itemPrice ?? 0,
       line_items: JSON.stringify(Array.isArray(lineItems) ? lineItems : []),
+      selected_color: selectedColor ?? null, selected_size: selectedSize ?? null,
       // Payment is already verified above — go straight to escrow_held,
       // same as the cart flow, instead of landing at "pending" and relying
       // on a separate activation step.
