@@ -307,6 +307,14 @@ export interface CartItem {
   basePriceSale?: number                // kobo — undiscounted 1-piece price (pre-flash/coupon), used for below-first-tier math
   bulkPricing?: BulkTier[] | null
   minOrderQty?: number | null
+  // The listing's actual stock at add-to-cart time — undefined/null means
+  // unlimited/untracked stock (most listings). When set, this is the true
+  // ceiling on quantity: a single-unit item (stockQty = 1) must never be
+  // bumpable past 1 in the cart drawer just because the platform's generic
+  // maxQtyPerItem default (e.g. 10) is higher. Not live-synced after
+  // add-to-cart — if stock changes elsewhere while it's sitting in the
+  // cart, checkout-time stock validation is the real backstop.
+  stockQty?: number | null
   agreedPrice?: number                  // kobo — if buyer has accepted offer, use this
   offerId?: string | null               // reference to the accepted offer, if agreedPrice is set
   couponCode?: string                   // seller coupon code applied, if any (informational — priceSale already reflects the discount)
