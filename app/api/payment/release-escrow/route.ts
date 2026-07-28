@@ -94,6 +94,19 @@ export async function POST(req: NextRequest) {
       escrow_release_at: now,
     })
 
+    // FIX: same missing total_sales increment as the other two completion
+    // paths (confirm-delivery, cron auto-release) — this admin-triggered
+    // path was the third place an order gets marked completed, and it had
+    // the same gap.
+    const sellerId = order.seller_id ?? order.sellerId
+    if (sellerId) {
+      const sellerUser = await AdminService.getDoc("users", String(sellerId)) as Record<string, unknown> | null
+      await AdminService.updateDoc("users", String(sellerId), {
+        total_sales: Number(sellerUser?.total_sales ?? sellerUser?.totalSales ?? 0) + 1,
+        updated_at:  now,
+      })
+    }
+
     return NextResponse.json({ success: true, orderId, releasedBy: adminId ?? null })
   } catch (err: any) {
     console.error("[payment/release-escrow] Unexpected error:", err)
