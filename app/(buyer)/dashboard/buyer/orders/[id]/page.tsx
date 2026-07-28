@@ -1,6 +1,7 @@
 "use client"
 
 import { AdminService, OrdersService } from "@/src/services"
+import type { CartLineItem } from "@/src/types"
 // app/(buyer)/dashboard/buyer/orders/[id]/page.tsx
 
 import { useEffect, useState, useRef } from "react"
@@ -432,7 +433,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {order.lineItems && order.lineItems.length > 1 && (
             <div className="space-y-1 border-t border-border pt-2">
-              {order.lineItems.map((li, i) => (
+              {order.lineItems.map((li: CartLineItem, i: number) => (
                 <div key={i} className="flex justify-between text-xs">
                   <span className="text-muted-foreground truncate pr-2">
                     {li.title}
