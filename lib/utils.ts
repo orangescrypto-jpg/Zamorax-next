@@ -6,6 +6,63 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Format price in Naira — always use kobo internally
+export interface BulkTier {
+  minQty: number
+  price: number
+}
+
+export interface ResolvedBulkPrice {
+  total: number        // kobo — resolved TOTAL for the given quantity
+  isExactTier: boolean
+}
+
+// Shared bulk-tier resolver — used by both the listing page (initial add-to-cart)
+// and the cart drawer (re-resolving on every quantity change), so a buyer never
+// sees two different totals for the same listing/quantity depending on where
+// they changed it.
+//
+// Bulk tiers are flat bundle totals as the seller set them — e.g.
+// "≥10 pieces → ₦18,000" means ₦18,000 IS the price for a bundle of 10,
+// not a per-piece rate to multiply by 10. So:
+//   - Quantity exactly matches a tier's minQty → that tier's price, used
+//     as-is, no multiplication.
+//   - Quantity below the first tier's minQty → qty × basePriceSale.
+//   - Quantity strictly between two tiers → qty × the MOST RECENTLY
+//     CROSSED tier's implied per-piece rate (that tier's price ÷ its
+//     minQty) — not the base 1-piece price, and not the next tier up.
+// Returns null when there's no bulk pricing at all, so callers fall back
+// to plain base-price × qty.
+//
+// flashDiscountPercent (0-100), when provided, discounts every tier by the
+// same percentage as the 1-piece flash price, keeping the whole price
+// ladder consistent. Tiers are scaled at read time only — the stored
+// bulkPricing data itself is never mutated.
+export function resolveBulkPrice(
+  bulkPricing: BulkTier[] | null | undefined,
+  basePriceSale: number,
+  quantity: number,
+  flashDiscountPercent?: number | null
+): ResolvedBulkPrice | null {
+  if (!bulkPricing || bulkPricing.length === 0) return null
+
+  const scale = (price: number) =>
+    flashDiscountPercent ? Math.round(price * (1 - flashDiscountPercent / 100)) : price
+
+  const tiers = [...bulkPricing]
+    .sort((a, b) => a.minQty - b.minQty)
+    .map((t) => ({ minQty: t.minQty, price: scale(t.price) }))
+
+  const exactTier = tiers.find((t) => t.minQty === quantity)
+  if (exactTier) return { total: exactTier.price, isExactTier: true }
+
+  const crossed = tiers.filter((t) => quantity > t.minQty)
+  if (crossed.length === 0) return null // below first tier — caller uses base price × qty
+
+  const lastCrossed = crossed[crossed.length - 1]
+  const perPieceRate = lastCrossed.price / lastCrossed.minQty
+  return { total: Math.round(perPieceRate * quantity), isExactTier: false }
+}
+
 export function formatPrice(kobo: number): string {
   const naira = kobo / 100
   return new Intl.NumberFormat("en-NG", {
