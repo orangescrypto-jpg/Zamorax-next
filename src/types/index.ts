@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 export type { OrderStatus, EscrowStatus, DisputeStatus, TxType, PayoutStatus } from "@/constants/status"
+export type { BulkTier } from "@/lib/utils"
 
 // ─── User ────────────────────────────────────────────────────────
 export interface User {
@@ -89,7 +90,7 @@ export interface Listing {
   //    1 piece: priceSale | ≥5: ₦X | ≥15: ₦Y | ≥25: ₦Z
   //    Sorted ascending by minQty. Seller can add/remove tiers freely,
   //    not fixed to any count. Absent/empty = no bulk pricing set.
-  bulkPricing?: { minQty: number; price: number }[] | null
+  bulkPricing?: BulkTier[] | null
   // Hard floor on order size, separate from bulk pricing tiers. Optional.
   minOrderQty?: number | null
   // How this item is sold — defaults to "piece" if unset.
@@ -297,7 +298,14 @@ export interface CartItem {
   // mixes both — see CartCheckoutModal.
   sellerIsOfficial?: boolean
   sellerState: string                   // seller's nigerianState — for ZLA fee calc
-  priceSale: number                     // kobo — original listing price
+  priceSale: number                     // kobo — resolved UNIT price at the quantity the item was added/last updated at
+  // ── Bulk pricing passthrough — lets the cart re-resolve the correct
+  // total (and unit price) whenever quantity changes, instead of the
+  // stale per-unit rate captured at add-to-cart time. Undefined when the
+  // listing has no bulk pricing.
+  basePriceSale?: number                // kobo — undiscounted 1-piece price (pre-flash/coupon), used for below-first-tier math
+  bulkPricing?: BulkTier[] | null
+  minOrderQty?: number | null
   agreedPrice?: number                  // kobo — if buyer has accepted offer, use this
   offerId?: string | null               // reference to the accepted offer, if agreedPrice is set
   couponCode?: string                   // seller coupon code applied, if any (informational — priceSale already reflects the discount)
