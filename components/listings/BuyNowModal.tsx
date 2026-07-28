@@ -58,6 +58,11 @@ interface Props {
   // Defaults to 1 for any caller that doesn't pass it, preserving old
   // single-unit behavior.
   quantity?: number
+  // Fashion variant the buyer picked on the listing page, if the listing
+  // had more than one color/size option (see ListingDetailClient's variant
+  // picker). Carried into the order so the seller knows what to ship.
+  selectedColor?: string | null
+  selectedSize?: string | null
   seller?: {
     fullName?: string
     storeName?: string
@@ -65,7 +70,7 @@ interface Props {
   } | null
 }
 
-export function BuyNowModal({ open, onClose, listing, seller, quantity = 1 }: Props) {
+export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, selectedColor, selectedSize }: Props) {
   const { user }     = useAuth()
   const router       = useRouter()
   const { toast }    = useToast()
@@ -177,6 +182,8 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1 }: Pr
               listingId:       listing.id,
               itemTitle:       listing.title,
               itemImage:       listing.images?.[0] ?? "",
+              selectedColor:   selectedColor ?? undefined,
+              selectedSize:    selectedSize ?? undefined,
               totalAmount:     breakdown.buyerTotalKobo,
               platformFee:     breakdown.commissionKobo,
               sellerPayout:    breakdown.sellerPayoutKobo,
@@ -249,6 +256,8 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1 }: Pr
           listingId:       listing.id,
           itemTitle:       listing.title,
           itemImage:       listing.images?.[0],
+          selectedColor:   selectedColor ?? undefined,
+          selectedSize:    selectedSize ?? undefined,
           totalAmount:     breakdown.buyerTotalKobo,
           platformFee:     breakdown.commissionKobo,
           sellerPayout:    breakdown.sellerPayoutKobo,
