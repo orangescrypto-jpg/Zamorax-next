@@ -8,6 +8,20 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import type { Listing, CartItem, DeliveryMethod } from "@/src/types"
+import { resolveBulkPrice } from "@/lib/utils"
+
+// Re-resolves a cart item's unit price for a given quantity using its
+// carried-through bulk tiers, falling back to its existing priceSale
+// unchanged when the item has no bulk pricing (plain-price / offer-priced
+// items behave exactly as before).
+function resolvedUnitPrice(item: CartItem, quantity: number): number {
+  if (!item.bulkPricing || item.bulkPricing.length === 0 || item.basePriceSale == null) {
+    return item.priceSale
+  }
+  const resolved = resolveBulkPrice(item.bulkPricing, item.basePriceSale, quantity)
+  if (!resolved) return item.basePriceSale // below first tier — base 1-piece rate
+  return Math.round(resolved.total / Math.max(1, quantity))
+}
 
 // ─── Saved items (wishlist) ───────────────────────────────────────────────
 interface SavedItem {
@@ -116,36 +130,53 @@ export const useCartItemsStore = create<CartItemsState>()(
           const existing = s.cartItems.find((c) => c.listingId === item.listingId)
           if (existing) {
             return {
-              cartItems: s.cartItems.map((c) =>
-                c.listingId === item.listingId
-                  ? {
-                      ...c,
-                      // An offer price is for exactly 1 unit — always
-                      // overwrite quantity to 1 in that case rather than
-                      // adding to whatever was already in the cart.
-                      // Otherwise (regular re-add), accumulate as before,
-                      // clamped between the listing's min and max order qty.
-                      // Also refresh agreedPrice/offerId so accepting an
-                      // offer after the item was already in the cart at
-                      // full price actually takes effect.
-                      quantity: item.agreedPrice != null
-                        ? 1
-                        : Math.min(Math.max(c.quantity + item.quantity, minQtyPerItem), maxQtyPerItem),
-                      agreedPrice: item.agreedPrice ?? c.agreedPrice,
-                      offerId: item.offerId ?? c.offerId,
-                    }
-                  : c
-              ),
+              cartItems: s.cartItems.map((c) => {
+                if (c.listingId !== item.listingId) return c
+
+                // An offer price is for exactly 1 unit — always overwrite
+                // quantity to 1 in that case rather than adding to whatever
+                // was already in the cart. Otherwise (regular re-add),
+                // accumulate as before, clamped between the listing's min
+                // and max order qty.
+                const nextQty = item.agreedPrice != null
+                  ? 1
+                  : Math.min(Math.max(c.quantity + item.quantity, minQtyPerItem), maxQtyPerItem)
+
+                // Refresh bulk-pricing fields from the latest add (seller
+                // may have changed tiers) and re-resolve the unit price at
+                // the new accumulated quantity — otherwise a second add
+                // that crosses into a new tier would keep the first add's
+                // stale rate.
+                const merged: CartItem = {
+                  ...c,
+                  quantity: nextQty,
+                  agreedPrice: item.agreedPrice ?? c.agreedPrice,
+                  offerId: item.offerId ?? c.offerId,
+                  bulkPricing: item.bulkPricing ?? c.bulkPricing,
+                  basePriceSale: item.basePriceSale ?? c.basePriceSale,
+                  minOrderQty: item.minOrderQty ?? c.minOrderQty,
+                }
+                return merged.agreedPrice != null
+                  ? merged
+                  : { ...merged, priceSale: resolvedUnitPrice(merged, nextQty) }
+              }),
             }
           }
+          const initialQty = item.agreedPrice != null
+            ? 1
+            : Math.min(Math.max(item.quantity, minQtyPerItem), maxQtyPerItem)
           return {
             cartItems: [
               ...s.cartItems,
               {
                 ...item,
-                quantity: item.agreedPrice != null
-                  ? 1
-                  : Math.min(Math.max(item.quantity, minQtyPerItem), maxQtyPerItem),
+                quantity: initialQty,
+                // item.priceSale already carries the caller's resolved rate
+                // for its original quantity — only re-resolve if clamping
+                // above actually changed the quantity.
+                priceSale: item.agreedPrice != null || initialQty === item.quantity
+                  ? item.priceSale
+                  : resolvedUnitPrice(item, initialQty),
               },
             ],
           }
@@ -160,11 +191,18 @@ export const useCartItemsStore = create<CartItemsState>()(
           cartItems:
             qty <= 0
               ? s.cartItems.filter((c) => c.listingId !== listingId)
-              : s.cartItems.map((c) =>
-                  c.listingId === listingId
-                    ? { ...c, quantity: Math.max(qty, minQtyPerItem) }
-                    : c
-                ),
+              : s.cartItems.map((c) => {
+                  if (c.listingId !== listingId) return c
+                  // The listing's own minOrderQty (carried on the item) is
+                  // the true floor — callers may also pass one explicitly,
+                  // so respect whichever is stricter.
+                  const floor = Math.max(minQtyPerItem, c.minOrderQty ?? 1)
+                  const nextQty = Math.max(qty, floor)
+                  // Offer-priced items have a fixed negotiated total for a
+                  // fixed quantity — never re-resolve or let qty drift.
+                  if (c.agreedPrice != null) return { ...c, quantity: nextQty }
+                  return { ...c, quantity: nextQty, priceSale: resolvedUnitPrice(c, nextQty) }
+                }),
         })),
 
       clearCart: () => set({ cartItems: [] }),
@@ -182,8 +220,16 @@ export const useCartItemsStore = create<CartItemsState>()(
 
       getCartTotal: () =>
         get().cartItems.reduce((sum, item) => {
-          const price = item.agreedPrice ?? item.priceSale
-          return sum + price * item.quantity
+          if (item.agreedPrice != null) return sum + item.agreedPrice * item.quantity
+          if (item.bulkPricing && item.bulkPricing.length > 0 && item.basePriceSale != null) {
+            const resolved = resolveBulkPrice(item.bulkPricing, item.basePriceSale, item.quantity)
+            // Exact-tier totals are flat bundle prices, not unit×qty — use
+            // resolved.total directly so we never drift from rounding the
+            // per-piece rate back out and re-multiplying.
+            if (resolved) return sum + resolved.total
+            return sum + item.basePriceSale * item.quantity
+          }
+          return sum + item.priceSale * item.quantity
         }, 0),
 
       getItemCount: () => get().cartItems.length,
