@@ -5,7 +5,8 @@
 // ─────────────────────────────────────────────────────────────────
 
 export type { OrderStatus, EscrowStatus, DisputeStatus, TxType, PayoutStatus } from "@/constants/status"
-export type { BulkTier } from "@/lib/utils"
+import type { BulkTier } from "@/lib/utils"
+export type { BulkTier }
 
 // ─── User ────────────────────────────────────────────────────────
 export interface User {
