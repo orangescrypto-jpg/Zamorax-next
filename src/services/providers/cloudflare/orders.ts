@@ -41,6 +41,8 @@ function mapRow(row: Record<string, unknown>): Order {
     deliveredAt:     row.delivered_at      ? String(row.delivered_at)      : undefined,
     refundedAt:      row.refunded_at       ? String(row.refunded_at)       : undefined,
     lineItems:       parse(row.line_items ?? row.lineItems),
+    selectedColor:   row.selected_color ?? row.selectedColor ? String(row.selected_color ?? row.selectedColor) : undefined,
+    selectedSize:    row.selected_size  ?? row.selectedSize  ? String(row.selected_size  ?? row.selectedSize)  : undefined,
     createdAt:       String(row.created_at ?? new Date().toISOString()),
     updatedAt:       String(row.updated_at ?? new Date().toISOString()),
   } as Order
@@ -211,6 +213,8 @@ export const OrdersService: IOrdersService = {
       status:           "pending",
       escrow_status:    "held",
       line_items:       data.lineItems ? JSON.stringify(data.lineItems) : null,
+      selected_color:   data.selectedColor ?? null,
+      selected_size:    data.selectedSize  ?? null,
       delivery_street:  data.deliveryStreet   ?? null,
       delivery_city:    data.deliveryCity     ?? null,
       delivery_state:   data.deliveryState    ?? null,
