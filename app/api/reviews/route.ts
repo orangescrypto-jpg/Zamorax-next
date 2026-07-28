@@ -88,6 +88,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
       nativeDB,
     )
 
+    // FIX: users.seller_rating was never written anywhere — reviews
+    // accumulated correctly in this table, but the star average shown on
+    // the listing page and fed into SellerTrustScore stayed frozen at
+    // whatever it started as (0) forever, no matter how many reviews came
+    // in. Recompute the true average across all of this seller's reviews
+    // and write it back, so it always reflects reality rather than
+    // incrementally drifting from rounding.
+    const avgRows = await d1Query(
+      "SELECT AVG(rating) as avg_rating FROM reviews WHERE seller_id = ?",
+      [sellerId],
+      nativeDB,
+    )
+    const avgRating = Number((avgRows?.results?.[0] as { avg_rating?: number } | undefined)?.avg_rating ?? rating)
+    await d1Query(
+      "UPDATE users SET seller_rating = ?, updated_at = ? WHERE uid = ?",
+      [avgRating, new Date().toISOString(), sellerId],
+      nativeDB,
+    )
+
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
