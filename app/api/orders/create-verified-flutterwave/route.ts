@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
       listingId, itemTitle, itemImage, totalAmount, platformFee, sellerPayout,
       deliveryStreet, deliveryCity, deliveryState, deliveryLGA, deliveryMethod,
       sellerState, buyerState, itemPrice, isOfferOrder, offerId, originalPrice,
-      lineItems,
+      lineItems, selectedColor, selectedSize,
     } = orderDraft
 
     // Quantity ordered — see create-verified-paystack for the same logic.
@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
       seller_state: sellerState ?? "", buyer_state: buyerState ?? "",
       item_price: itemPrice ?? 0,
       line_items: JSON.stringify(Array.isArray(lineItems) ? lineItems : []),
+      selected_color: selectedColor ?? null, selected_size: selectedSize ?? null,
       // Payment is already verified above — go straight to escrow_held,
       // same as the Paystack flow.
       status: "escrow_held", escrow_status: "held", escrow_held_at: new Date().toISOString(),
