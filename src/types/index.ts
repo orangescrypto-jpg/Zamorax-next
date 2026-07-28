@@ -203,6 +203,12 @@ export interface Order {
   listingId: string
   itemTitle: string
   itemImage?: string
+  // Fashion variant the buyer selected at add-to-cart time, if the
+  // listing offered more than one color/size (attributes.colors /
+  // attributes.sizes on the listing). Carried through from CartItem
+  // so sellers know exactly what to ship.
+  selectedColor?: string
+  selectedSize?: string
   sellerName?: string
   sellerStoreName?: string
   buyerName?: string
@@ -272,6 +278,11 @@ export interface CartLineItem {
   unitPrice: number                     // kobo — original listing price
   agreedPrice?: number                  // kobo — if buyer has accepted offer
   offerId?: string | null               // reference to the accepted offer, if agreedPrice is set
+  // Fashion variant selected for this specific line item — a cart order
+  // can bundle several listings from the same seller, each with its own
+  // color/size choice, so this lives per-line rather than on the order.
+  selectedColor?: string | null
+  selectedSize?: string | null
 }
 
 export interface CartItem {
@@ -294,6 +305,12 @@ export interface CartItem {
   shippingMethods: DeliveryMethod[]     // methods seller supports
   weightKg?: number
   isFragile?: boolean
+  // Fashion variant selection — set when the listing offers multiple
+  // colors/sizes (attributes.colors / attributes.sizes) and the buyer
+  // picked one of each before adding to cart. Undefined for listings
+  // with no variants or only one option.
+  selectedColor?: string
+  selectedSize?: string
   addedAt: string                       // ISO
 }
 
