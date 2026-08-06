@@ -37,7 +37,7 @@ export type { IReferralsService }     from "./referrals"
 export type { IBlogService }          from "./blog"
 export type { IAdminService, FeaturedBanner } from "./admin"
 export type { DeliveryFeeBreakdown, LogisticsPricingSnapshot, DeliveryZone } from "./logistics"
-export type { ShippingMethodConfig, ShippingMethodKey } from "./shipping"
+export type { ShippingMethodConfig, ShippingMethodKey, FBZWarehouseAvailability } from "./shipping"
 
 // ── D1 shim helpers (Firestore-compatible API over D1) ────────────
 // Used by any component still calling Firestore-style helpers during migration.
