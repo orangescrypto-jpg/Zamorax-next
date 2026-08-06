@@ -10,11 +10,11 @@
 
 import { useEffect, useState } from "react"
 import { useFormContext } from "react-hook-form"
-import { ShippingService, type ShippingMethodConfig } from "@/src/services"
+import { ShippingService, type ShippingMethodConfig, type FBZWarehouseAvailability } from "@/src/services"
 import { cn } from "@/lib/utils"
 import {
   Users, Package, Zap, ChevronDown, ChevronUp,
-  MapPin, Info, Loader2, CheckCircle2, Truck,
+  MapPin, Info, Loader2, CheckCircle2, Truck, Warehouse,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -34,6 +34,46 @@ function StatePills({ states, emptyMsg }: { states: string[]; emptyMsg: string }
         >
           <MapPin className="h-2.5 w-2.5 text-muted-foreground" />{s}
         </span>
+      ))}
+    </div>
+  )
+}
+
+function WarehouseList({ warehouses }: { warehouses: FBZWarehouseAvailability[] }) {
+  if (warehouses.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        Admin hasn't added any FBZ warehouse locations yet.
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-1.5 mt-1">
+      {warehouses.map(w => (
+        <div
+          key={w.id}
+          className="flex items-center justify-between gap-2 text-xs bg-white border rounded-lg px-2.5 py-1.5"
+        >
+          <div className="min-w-0">
+            <p className="font-medium text-foreground truncate">{w.name}</p>
+            <p className="text-muted-foreground flex items-center gap-1">
+              <MapPin className="h-2.5 w-2.5 shrink-0" />{w.city}, {w.state}
+            </p>
+          </div>
+          {!w.isActive ? (
+            <Badge variant="outline" className="text-[10px] px-1.5 shrink-0 text-muted-foreground">
+              Inactive
+            </Badge>
+          ) : w.acceptingStock ? (
+            <Badge className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 shrink-0">
+              Accepting stock
+            </Badge>
+          ) : (
+            <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 shrink-0">
+              At capacity
+            </Badge>
+          )}
+        </div>
       ))}
     </div>
   )
@@ -74,7 +114,8 @@ export function Step5bShipment() {
 
   if (!config) return null
 
-  const { meetupEnabled, zlaEnabled, fbzEnabled, zlaCoveredStates, fbzCoveredStates } = config
+  const { meetupEnabled, zlaEnabled, fbzEnabled, zlaCoveredStates, fbzCoveredStates, fbzWarehouses } = config
+  const fbzHasAcceptingWarehouse = fbzWarehouses.some(w => w.acceptingStock)
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
@@ -220,6 +261,15 @@ export function Step5bShipment() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-sm">FBZ — Fulfilled by Zamorax</p>
                   <Badge className="bg-amber-100 text-amber-700 text-[10px] px-1.5">⚡ Fastest</Badge>
+                  {fbzHasAcceptingWarehouse ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5">
+                      Warehouse available
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] px-1.5 text-muted-foreground">
+                      No warehouse open right now
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Send your stock to our warehouse. We handle storage, packing, and fast dispatch.
@@ -259,8 +309,14 @@ export function Step5bShipment() {
                   </p>
                   <StatePills
                     states={fbzCoveredStates}
-                    emptyMsg="Admin hasn't configured FBZ delivery states yet."
+                    emptyMsg="No active warehouse locations yet — admin hasn't set one up in your area."
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Warehouse className="h-3.5 w-3.5 text-amber-600" /> Warehouse locations
+                  </p>
+                  <WarehouseList warehouses={fbzWarehouses} />
                 </div>
               </div>
             )}
