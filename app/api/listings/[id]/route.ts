@@ -51,6 +51,7 @@ function rowToListing(row: Record<string, unknown>) {
     weightKg:           row.weight_kg               ? Number(row.weight_kg)        : undefined,
     isFragile:          row.is_fragile              ? !!row.is_fragile             : undefined,
     shippingMethods:    parse(row.delivery_options  ?? row.shipping_methods)       ?? undefined,
+    estimatedDeliveryDays: row.estimated_delivery_days ? String(row.estimated_delivery_days) : undefined,
     stockQty:           row.stock_qty != null       ? Number(row.stock_qty)        : undefined,
     views:              Number(row.views            ?? 0),
     saves:              Number(row.saves            ?? 0),
