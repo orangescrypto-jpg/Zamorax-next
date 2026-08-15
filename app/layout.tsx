@@ -1,5 +1,5 @@
 // app/layout.tsx
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Suspense } from "react"
 import { AnnouncementBar } from "@/components/shared/AnnouncementBar"
 import { ReferralCapture } from "@/components/shared/ReferralCapture"
@@ -83,12 +83,21 @@ export const metadata: Metadata = {
   },
 }
 
+// Ensures the page renders at true mobile width instead of a shrunk-down
+// desktop layout. maximumScale is capped but pinch-zoom is still allowed
+// (no user-scalable: false) so the site stays accessible.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#f97316",
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#f97316" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Zamorax" />
