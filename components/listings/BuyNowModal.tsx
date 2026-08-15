@@ -4,6 +4,7 @@
 // Small header, item row, then step content. Sticky action buttons at bottom.
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { useToast } from "@/components/ui/use-toast"
@@ -403,9 +404,11 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
         {!offerLoading && (
           <div className="flex items-center gap-3 px-4 py-2.5 shrink-0">
             {listing.images?.[0] ? (
-              <img
+              <Image
                 src={listing.images[0]}
                 alt={listing.title}
+                width={44}
+                height={44}
                 className="w-11 h-11 rounded-lg object-cover shrink-0 border"
               />
             ) : (
