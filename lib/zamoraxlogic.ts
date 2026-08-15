@@ -4,6 +4,8 @@
 // Never call ZamoraxLogic API directly from components or other services.
 // ─────────────────────────────────────────────────────────────────
 
+import { fetchWithRetry, type FetchWithRetryOptions } from "@/lib/fetch-with-retry"
+
 const ZLA_API_URL          = process.env.ZAMORAXLOGIC_API_URL          || "https://zamoraxlogic.com/api/v1"
 const ZLA_API_KEY          = process.env.ZAMORAXLOGIC_API_KEY          || ""
 const ZLA_WEBHOOK_SECRET   = process.env.ZAMORAXLOGIC_WEBHOOK_SECRET   || ""
@@ -85,17 +87,32 @@ export interface ZLACoverageResponse {
 
 // ── Internal fetch wrapper ─────────────────────────────────────────────────
 
-const zlaFetch = async (endpoint: string, options?: RequestInit) => {
+// retryOpts defaults to safe behavior: GET requests (getCoverage,
+// getShipment, calculateRate) retry automatically on timeout/network
+// drop/5xx. POST requests (bookShipment, cancelShipment) do NOT retry
+// by default, since ZamoraxLogic has no idempotency-key mechanism yet —
+// blindly retrying "book shipment" on a flaky connection could create
+// two real-world deliveries for one order. Pass { retryUnsafe: true }
+// explicitly at the call site if that ever changes.
+const zlaFetch = async (
+  endpoint: string,
+  options?: RequestInit,
+  retryOpts?: FetchWithRetryOptions,
+) => {
   if (!ZLA_API_KEY) throw new Error("ZAMORAXLOGIC_API_KEY not configured")
 
-  const res = await fetch(`${ZLA_API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${ZLA_API_KEY}`,
-      "Content-Type":  "application/json",
-      ...options?.headers,
+  const res = await fetchWithRetry(
+    `${ZLA_API_URL}${endpoint}`,
+    {
+      ...options,
+      headers: {
+        "Authorization": `Bearer ${ZLA_API_KEY}`,
+        "Content-Type":  "application/json",
+        ...options?.headers,
+      },
     },
-  })
+    { retries: 3, timeoutMs: 12_000, ...retryOpts },
+  )
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: "ZLA API error" }))
