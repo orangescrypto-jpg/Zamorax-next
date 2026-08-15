@@ -3,6 +3,7 @@
 import { OffersService } from "@/src/services"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -80,7 +81,7 @@ export function MakeOfferModal({ open, onClose, listing }: Props) {
           {/* Listing preview */}
           <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
             {listing.images[0] && (
-              <img src={listing.images[0]} alt="" className="h-12 w-12 rounded object-cover" />
+              <Image src={listing.images[0]} alt="" width={48} height={48} className="h-12 w-12 rounded object-cover" />
             )}
             <div>
               <p className="text-sm font-medium line-clamp-1">{listing.title}</p>
