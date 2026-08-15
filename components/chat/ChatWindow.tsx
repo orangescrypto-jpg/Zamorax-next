@@ -3,6 +3,7 @@
 // WhatsApp-style: fills parent height, messages always scroll to bottom
 
 import { useRef, useEffect, useState } from "react"
+import Image from "next/image"
 import { useChat } from "@/hooks/useChat"
 import { MessageBubble } from "./MessageBubble"
 import { ChatLockNotice } from "./ChatLockNotice"
@@ -225,9 +226,11 @@ export function ChatWindow({ chatId, userId, receiverName, chat }: ChatWindowPro
       {(effectiveListingId || effectiveListingTitle) && (
         <div className="px-3 py-2 border-t bg-muted/30 flex items-center gap-3 shrink-0">
           {effectiveListingImage ? (
-            <img
+            <Image
               src={effectiveListingImage}
               alt={effectiveListingTitle || "Listing"}
+              width={40}
+              height={40}
               className="h-10 w-10 rounded-md object-cover border bg-background shrink-0"
             />
           ) : (
@@ -353,7 +356,7 @@ export function ChatWindow({ chatId, userId, receiverName, chat }: ChatWindowPro
                   className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-muted/60 text-left disabled:opacity-50"
                 >
                   {l.images?.[0] ? (
-                    <img src={l.images[0]} alt={l.title} className="h-9 w-9 rounded object-cover border shrink-0" />
+                    <Image src={l.images[0]} alt={l.title} width={36} height={36} className="h-9 w-9 rounded object-cover border shrink-0" />
                   ) : (
                     <div className="h-9 w-9 rounded border bg-muted shrink-0" />
                   )}
