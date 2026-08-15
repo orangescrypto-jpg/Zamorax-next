@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { X, Upload, Video, Loader2, CheckCircle, AlertCircle, Film, ImageIcon } from "lucide-react"
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/hooks/useAuth"
 import { StorageService } from "@/src/services"
@@ -213,7 +214,13 @@ export function Step4Media() {
         <div className="grid grid-cols-3 gap-2">
           {imageValues.map((url, i) => (
             <div key={`${url}-${i}`} className="relative aspect-square rounded-lg overflow-hidden bg-muted border">
-              <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+              <Image
+                src={url}
+                alt={`Photo ${i + 1}`}
+                fill
+                sizes="(max-width: 640px) 33vw, 200px"
+                className="object-cover"
+              />
               <button
                 type="button"
                 onClick={() => removeImage(i)}
