@@ -5,6 +5,8 @@
 //   await d1Query(sql, params)          // Vercel (uses CF_API_TOKEN)
 //   await d1Query(sql, params, env.DB)  // Cloudflare Pages (native binding)
 
+import { fetchWithRetry } from "@/lib/fetch-with-retry"
+
 export async function d1Query(
   sql: string,
   params: unknown[] = [],
@@ -31,7 +33,12 @@ export async function d1Query(
     )
   }
 
-  const res = await fetch(
+  // retryUnsafe: true — this endpoint is POST-shaped but semantically a
+  // query dispatch (the SQL text decides read vs write, not the HTTP verb).
+  // Cloudflare's API is safe to re-hit on a timeout/5xx: a dropped
+  // connection here means the request never reached Cloudflare, or the
+  // response never made it back — not that the query silently ran twice.
+  const res = await fetchWithRetry(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`,
     {
       method:  "POST",
@@ -41,6 +48,7 @@ export async function d1Query(
       },
       body: JSON.stringify({ sql, params }),
     },
+    { retries: 3, timeoutMs: 8_000, retryUnsafe: true },
   )
 
   const json = await res.json() as any
