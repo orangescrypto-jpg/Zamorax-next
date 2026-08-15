@@ -56,6 +56,17 @@
     @apply bg-background text-foreground font-body;
   }
 
+  /* Safety net: stops a single overflowing element anywhere on any page
+     (wide table, unwrapped long string, off-canvas menu, etc.) from
+     creating horizontal scroll / a sideways gap on mobile. This hides
+     overflow rather than fixing its source, so if something relies on
+     horizontal scroll on purpose (a carousel, a table wrapper), give
+     that specific element its own `overflow-x: auto` — this rule only
+     applies at the page root. */
+  html, body {
+    overflow-x: hidden;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading font-semibold tracking-tight;
   }
