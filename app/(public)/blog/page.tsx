@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Clock, Search, ChevronRight, Loader2 } from "lucide-react"
+import { Clock, Tag, Search, ChevronRight, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { BlogService } from "@/src/services/blog"
