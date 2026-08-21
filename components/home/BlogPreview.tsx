@@ -1,9 +1,10 @@
 "use client"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, Clock, Tag } from "lucide-react"
+import { ArrowRight, Clock } from "lucide-react"
 import type { BlogPost } from "@/src/types/blog"
 import { usePlatformSettings } from "@/hooks/usePlatformSettings"
+import { blogCoverImage } from "@/constants/blog"
 
 function formatDate(iso: string | null): string {
   if (!iso) return ""
@@ -20,29 +21,18 @@ function BlogCard({ post, featured = false }: { post: BlogPost; featured?: boole
         hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all
         ${featured ? "sm:col-span-2 sm:flex" : ""}`}
     >
-      {post.coverImage ? (
-        <div className={`relative overflow-hidden bg-white/5 ${featured ? "sm:w-2/5 h-44 sm:h-auto" : "h-40"}`}>
-          <img
-            src={post.coverImage}
-            alt={post.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
-          />
-          <span className="absolute top-2 left-2 bg-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
-            {post.category}
-          </span>
-        </div>
-      ) : (
-        <div className={`bg-white/5 flex items-center justify-center ${featured ? "sm:w-2/5 h-44 sm:h-auto" : "h-40"}`}>
-          <Tag className="h-8 w-8 text-white/20" />
-        </div>
-      )}
+      <div className={`relative overflow-hidden bg-white/5 ${featured ? "sm:w-2/5 h-44 sm:h-auto" : "h-40"}`}>
+        <img
+          src={blogCoverImage(post.coverImage)}
+          alt={post.title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          onError={e => { (e.target as HTMLImageElement).src = blogCoverImage(null) }}
+        />
+        <span className="absolute top-2 left-2 bg-primary/90 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+          {post.category}
+        </span>
+      </div>
       <div className={`p-4 flex flex-col justify-center space-y-2 ${featured ? "sm:flex-1" : ""}`}>
-        {!post.coverImage && (
-          <span className="inline-block bg-primary/20 text-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide w-fit">
-            {post.category}
-          </span>
-        )}
         <h3 className={`text-white font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors
           ${featured ? "text-base sm:text-lg" : "text-sm"}`}>
           {post.title}
