@@ -15,6 +15,8 @@ import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/hooks/useAuth"
 import { StorageService } from "@/src/services"
 import { AdminService } from "@/src/services"
+import { recordMediaUpload } from "@/lib/mediaLibrary"
+import { MediaLibraryPicker } from "@/components/media/MediaLibraryPicker"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import imageCompression from "browser-image-compression"
@@ -83,6 +85,7 @@ export function Step4Media() {
   const [videoUploading, setVideoUploading] = useState(false)
   const [videoProgress, setVideoProgress] = useState(0)
   const [videoFileName, setVideoFileName] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const { toast } = useToast()
   const { user } = useAuth()
@@ -112,6 +115,7 @@ export function Step4Media() {
       const result = await StorageService.uploadFile(file, path)
       const url = result.url
       appendImage(url)
+      recordMediaUpload({ userId: user.uid, url, path, fileName: raw.name, context: "listing" })
       const savedKB = Math.max(0, Math.round((raw.size - file.size) / 1024))
       toast({
         title: "Photo uploaded",
@@ -180,6 +184,21 @@ export function Step4Media() {
     setVideoProgress(0)
   }
 
+  const handlePickFromLibrary = (urls: string[]) => {
+    const room = Math.max(0, limits.maxImagesPerListing - imageValues.length)
+    const toAdd = urls.slice(0, room)
+    if (toAdd.length > 0) {
+      setValue("images", [...imageValues, ...toAdd], { shouldValidate: true })
+    }
+    if (urls.length > toAdd.length) {
+      toast({
+        title: "Some photos skipped",
+        description: `Only added ${toAdd.length} — you're at the ${limits.maxImagesPerListing} photo limit.`,
+        variant: "destructive",
+      })
+    }
+  }
+
   // ── Plan label for video requirement ────────────────────────────────────────
   const videoPlanLabel =
     limits.videoRequiredForPlan === "none"    ? null :
@@ -210,6 +229,17 @@ export function Step4Media() {
         <p className="text-xs text-muted-foreground">
           Upload up to {limits.maxImagesPerListing} clear photos. Show all angles — front, back, sides, any damage.
         </p>
+
+        {!atImageLimit && (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+            Choose from my uploads
+          </button>
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           {imageValues.map((url, i) => (
@@ -359,6 +389,15 @@ export function Step4Media() {
           </p>
         </div>
       )}
+
+      <MediaLibraryPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        multiple
+        context="listing"
+        onSelect={() => {}}
+        onSelectMultiple={handlePickFromLibrary}
+      />
     </div>
   )
 }
