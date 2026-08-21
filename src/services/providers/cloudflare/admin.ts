@@ -121,6 +121,7 @@ const TABLES_WITHOUT_UPDATED_AT = new Set([
   "pending_payments",
   "insurance_pool",
   "seller_follows",
+  "media_library", // has created_at only, no updated_at
 ])
 function hasUpdatedAt(table: string): boolean {
   return !TABLES_WITHOUT_UPDATED_AT.has(table)
