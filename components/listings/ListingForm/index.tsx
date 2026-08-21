@@ -3,7 +3,7 @@
 import { AdminService, limit, serverTimestamp } from "@/src/services"
 import { getPlatformSettings } from "@/src/services/platformSettings"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useForm, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { listingSchema, type ListingFormValues } from "@/lib/validations/listing"
@@ -12,8 +12,9 @@ import { useSubSettings } from "@/hooks/useSubSettings"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { Loader2, ArrowLeft, ArrowRight } from "lucide-react"
+import { Loader2, ArrowLeft, ArrowRight, X } from "lucide-react"
 import { generateSlug } from "@/lib/utils"
+import { saveDraft, loadDraft, clearDraft } from "@/lib/formDraft"
 
 import { Step1Category }    from "./Step1Category"
 import { Step2Details }     from "./Step2Details"
@@ -70,6 +71,52 @@ export function ListingForm() {
       unitOfSale: "piece",
     }
   })
+
+  // ── Local draft (survives browser reload / crash / accidental nav) ──────
+  // Keyed per-user so one device's drafts don't leak across accounts.
+  const draftKey = user?.uid ? `listing_form_${user.uid}` : null
+  const [draftRestored, setDraftRestored] = useState(false)
+  const draftLoadedRef = useRef(false)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Restore once, as soon as we know who the user is.
+  useEffect(() => {
+    if (!draftKey || draftLoadedRef.current) return
+    draftLoadedRef.current = true
+    const draft = loadDraft<{ values: ListingFormValues; step: number }>(draftKey)
+    if (draft?.values) {
+      form.reset(draft.values)
+      if (draft.step) setStep(draft.step)
+      setDraftRestored(true)
+    }
+  }, [draftKey, form])
+
+  // Autosave on every change, debounced so a reload never loses more than
+  // a second or two of typing without hammering localStorage on every
+  // keystroke.
+  useEffect(() => {
+    if (!draftKey) return
+    const subscription = form.watch((values) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        saveDraft(draftKey, { values, step })
+      }, 600)
+    })
+    return () => subscription.unsubscribe()
+  }, [draftKey, form, step])
+
+  // Step changes should also persist immediately (watch() above only fires
+  // on field changes, not on setStep), so a reload lands back on the same
+  // step instead of Step 1.
+  useEffect(() => {
+    if (!draftKey || !draftLoadedRef.current) return
+    saveDraft(draftKey, { values: form.getValues(), step })
+  }, [draftKey, step])
+
+  const clearListingDraft = () => {
+    if (draftKey) clearDraft(draftKey)
+    setDraftRestored(false)
+  }
 
   const categorySlug = form.watch("categorySlug")
 
@@ -206,13 +253,14 @@ export function ListingForm() {
       toast({ title: "Listing Submitted!", description: "Pending admin approval. We'll notify you shortly.", variant: "success" })
       form.reset()
       setStep(1)
+      clearListingDraft()
     } catch (error: any) {
       console.error("Submit error:", error)
       toast({ title: "Submission Failed", description: error.message, variant: "destructive" })
     } finally {
       setLoading(false)
     }
-  }, [user, form, toast])
+  }, [user, form, toast, draftKey])
 
   return (
     <FormProvider {...form}>
@@ -221,6 +269,25 @@ export function ListingForm() {
           <h1 className="text-2xl font-heading font-bold">Post a New Listing</h1>
           <p className="text-muted-foreground">Follow the steps to list your item securely.</p>
         </div>
+
+        {draftRestored && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+            <p className="text-xs text-primary">
+              Picked up where you left off — we restored your unsaved draft.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                form.reset()
+                setStep(1)
+                clearListingDraft()
+              }}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <X className="h-3 w-3" /> Discard draft
+            </button>
+          </div>
+        )}
 
         <Progress value={(step / steps.length) * 100} className="mb-8" />
 
