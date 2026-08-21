@@ -115,6 +115,11 @@ const OWNED_TABLES: Record<string, OwnedTableRule> = {
   // (follower counts / "who do I follow" need to see all rows), writes are
   // scoped to the follower's own rows.
   seller_follows:     { columns: ["follower_id"], insertForceColumn: "follower_id" },
+  // Every image a seller/admin/moderator uploads gets a row here so it can
+  // be reselected from the "My uploads" picker later instead of
+  // re-uploading — see components/media/MediaLibraryPicker.tsx. Strictly
+  // owner-scoped: nobody should see or reuse another user's uploads.
+  media_library:      { columns: ["user_id"], insertForceColumn: "user_id" },
 }
 
 // listing_qna and reviews have a public-read component (anyone viewing a
