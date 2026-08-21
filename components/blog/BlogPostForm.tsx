@@ -19,10 +19,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import { BlogEditor } from "@/components/blog/BlogEditor"
+import { MediaLibraryPicker } from "@/components/media/MediaLibraryPicker"
 import { BlogService } from "@/src/services/blog"
 import { StorageService } from "@/src/services"
+import { recordMediaUpload } from "@/lib/mediaLibrary"
 import { cn, generateSlug } from "@/lib/utils"
 import type { BlogPost, BlogStatus } from "@/src/types/blog"
+import { BLOG_FALLBACK_COVER, blogCoverImage } from "@/constants/blog"
 
 const CATEGORIES = [
   "News", "Tips & Guides", "Safety", "Seller Stories",
@@ -42,6 +45,9 @@ export function BlogPostForm({
 }: BlogPostFormProps) {
   const router    = useRouter()
   const { toast } = useToast()
+  // authorId doubles as the uid that owns rows in media_library (the
+  // staff media picker table) — same shape as Step4Media's useAuth().user.uid.
+  const uid = authorId
 
   const [title,         setTitle]         = useState(initial?.title         ?? "")
   const [excerpt,       setExcerpt]       = useState(initial?.excerpt       ?? "")
@@ -55,6 +61,7 @@ export function BlogPostForm({
   const [saving,        setSaving]        = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [coverImgError, setCoverImgError]   = useState(false)
+  const [pickerOpen, setPickerOpen]         = useState(false)
 
   const isEditing = !!initial?.id
   const slug = initial?.slug || generateSlug(title)
@@ -85,6 +92,7 @@ export function BlogPostForm({
       const { url } = await StorageService.uploadFile(file, path)
       setCoverImageUrl(url)
       setCoverImgError(false)
+      recordMediaUpload({ userId: uid, url, path, fileName: file.name, context: "blog_cover" })
       toast({ title: "Cover image uploaded ✅" })
     } catch (err: any) {
       console.error("Cover image upload failed:", err)
@@ -154,7 +162,7 @@ export function BlogPostForm({
     { done: excerpt.length >= 100 && excerpt.length <= 160, label: "Excerpt 100–160 chars" },
     { done: wordCount >= 300, label: "Content 300+ words" },
     { done: tags.length >= 2, label: "At least 2 tags" },
-    { done: !!coverImage.trim(), label: "Cover image set" },
+    { done: !!coverImage.trim(), label: "Custom cover image set (optional — Zamorax default used otherwise)" },
     { done: !!category, label: "Category selected" },
   ]
 
@@ -295,7 +303,7 @@ export function BlogPostForm({
             <p className="text-white font-semibold text-sm flex items-center gap-1.5">
               <ImageIcon className="h-3.5 w-3.5 text-white/40" /> Cover Image
             </p>
-            <p className="text-white/30 text-xs mt-0.5">Paste a URL or upload an image</p>
+            <p className="text-white/30 text-xs mt-0.5">Paste a URL, upload an image, or pick from your uploads</p>
           </div>
           <div className="p-4 space-y-3">
             <Input
@@ -309,37 +317,53 @@ export function BlogPostForm({
               <span className="text-white/30 text-[10px] uppercase tracking-wide">or</span>
               <div className="flex-1 h-px bg-white/10" />
             </div>
-            <label className="flex items-center justify-center gap-2 w-full h-9 rounded-lg border border-dashed border-white/20 text-white/60 text-xs cursor-pointer hover:border-primary/50 hover:text-white transition-colors data-[uploading=true]:opacity-50 data-[uploading=true]:pointer-events-none" data-uploading={uploadingCover}>
-              {uploadingCover ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              {uploadingCover ? "Uploading…" : "Upload image"}
-              <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadingCover} />
-            </label>
-            {coverImage && (
-              <div className="rounded-lg overflow-hidden h-32 bg-white/5 relative">
-                {/* Only attempt to render if it looks like a real URL */}
-                {coverImage.startsWith("http") && !coverImgError ? (
-                  <img
-                    key={coverImage}
-                    src={coverImage}
-                    alt="Cover preview"
-                    className="w-full h-full object-cover"
-                    onError={() => setCoverImgError(true)}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full gap-1.5 px-4 text-center">
-                    <ImageIcon className="h-6 w-6 text-white/20" />
-                    <p className="text-[11px] text-red-400/80 leading-snug">
-                      {!coverImage.startsWith("http")
-                        ? "URL must start with https:// — local file paths can't be previewed"
-                        : "Image failed to load. Check the URL or upload a file instead."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            <p className="text-[10px] text-white/20">Recommended: 1200×630px for best social-share previews.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex items-center justify-center gap-2 h-9 rounded-lg border border-dashed border-white/20 text-white/60 text-xs cursor-pointer hover:border-primary/50 hover:text-white transition-colors data-[uploading=true]:opacity-50 data-[uploading=true]:pointer-events-none" data-uploading={uploadingCover}>
+                {uploadingCover ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                {uploadingCover ? "Uploading…" : "Upload image"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadingCover} />
+              </label>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="flex items-center justify-center gap-2 h-9 rounded-lg border border-dashed border-white/20 text-white/60 text-xs hover:border-primary/50 hover:text-white transition-colors"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                My uploads
+              </button>
+            </div>
+            <div className="rounded-lg overflow-hidden h-32 bg-white/5 relative">
+              {/* Only attempt to render if it looks like a real URL; otherwise show the branded fallback */}
+              {(!coverImage || coverImgError) ? (
+                <img src={BLOG_FALLBACK_COVER} alt="Zamorax fallback cover" className="w-full h-full object-cover" />
+              ) : coverImage.startsWith("http") ? (
+                <img
+                  key={coverImage}
+                  src={coverImage}
+                  alt="Cover preview"
+                  className="w-full h-full object-cover"
+                  onError={() => setCoverImgError(true)}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-1.5 px-4 text-center">
+                  <ImageIcon className="h-6 w-6 text-white/20" />
+                  <p className="text-[11px] text-red-400/80 leading-snug">
+                    URL must start with https:// — local file paths can't be previewed
+                  </p>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-white/20">
+              Recommended: 1200×630px for best social-share previews. Leave blank to use the default Zamorax cover.
+            </p>
           </div>
         </div>
+
+        <MediaLibraryPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={url => { setCoverImageUrl(url); setCoverImgError(false); setPickerOpen(false) }}
+        />
 
         {/* Category */}
         <div className="rounded-xl border border-white/10 bg-secondary overflow-hidden">
