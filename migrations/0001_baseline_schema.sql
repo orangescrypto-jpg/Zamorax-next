@@ -668,6 +668,25 @@ CREATE TABLE IF NOT EXISTS seller_follows (
 CREATE INDEX IF NOT EXISTS idx_seller_follows_seller   ON seller_follows(seller_id);
 CREATE INDEX IF NOT EXISTS idx_seller_follows_follower ON seller_follows(follower_id);
 
+-- ---------------------------------------------------------------------
+-- media_library — introduced 0007. Every image a seller/admin/moderator
+-- uploads (listing photos, blog covers) gets a row here so it can be
+-- reselected later from the "My uploads" picker instead of re-uploading
+-- the same file for a new listing or post. Owner-scoped via user_id in
+-- the D1 proxy's OWNED_TABLES (see app/api/d1/query/route.ts).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS media_library (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  url         TEXT NOT NULL,
+  path        TEXT,
+  file_name   TEXT,
+  context     TEXT,   -- e.g. "listing", "blog_cover" — informational only
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_library_user ON media_library(user_id);
+
 -- =====================================================================
 -- NOTE on tables seen in queries but NOT confidently mapped:
 --   "via", "x" — these showed up as table-name matches in a broad grep
