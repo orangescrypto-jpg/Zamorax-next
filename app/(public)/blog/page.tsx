@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Clock, Tag, Search, ChevronRight, Loader2 } from "lucide-react"
+import { Clock, Search, ChevronRight, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { BlogService } from "@/src/services/blog"
 import type { BlogPost } from "@/src/types/blog"
+import { blogCoverImage } from "@/constants/blog"
 
 const CATEGORIES = [
   "All", "News", "Tips & Guides", "Safety", "Seller Stories",
@@ -28,22 +29,15 @@ function PostCard({ post, featured = false }: { post: BlogPost; featured?: boole
         hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all
         ${featured ? "md:col-span-2 md:flex" : ""}`}
     >
-      {post.coverImage && (
-        <div className={`relative overflow-hidden bg-gray-100 ${featured ? "md:w-2/5 h-52 md:h-auto" : "h-44"}`}>
-          <img src={post.coverImage} alt={post.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-          <span className="absolute top-3 left-3 bg-primary/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
-            {post.category}
-          </span>
-        </div>
-      )}
+      <div className={`relative overflow-hidden bg-gray-100 ${featured ? "md:w-2/5 h-52 md:h-auto" : "h-44"}`}>
+        <img src={blogCoverImage(post.coverImage)} alt={post.title}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          onError={e => { (e.target as HTMLImageElement).src = blogCoverImage(null) }} />
+        <span className="absolute top-3 left-3 bg-primary/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
+          {post.category}
+        </span>
+      </div>
       <div className={`p-5 flex flex-col justify-center space-y-3 ${featured ? "md:flex-1" : ""}`}>
-        {!post.coverImage && (
-          <span className="inline-block bg-primary/20 text-primary text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide w-fit">
-            {post.category}
-          </span>
-        )}
         <h2 className={`text-gray-900 font-bold leading-snug group-hover:text-primary transition-colors line-clamp-2
           ${featured ? "text-xl md:text-2xl" : "text-base"}`}>
           {post.title}
