@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Clock, Eye, Tag, User } from "lucide-react"
 import type { BlogPost } from "@/src/types/blog"
+import { blogCoverImage } from "@/constants/blog"
 
 function formatDate(iso: string | null): string {
   if (!iso) return ""
@@ -126,16 +127,14 @@ export default function BlogPostPage() {
         </div>
 
         {/* Cover image */}
-        {post.coverImage && (
-          <div className="rounded-2xl overflow-hidden h-64 md:h-80 bg-gray-100">
-            <img
-              src={post.coverImage}
-              alt={post.title}
-              className="w-full h-full object-cover"
-              onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
-            />
-          </div>
-        )}
+        <div className="rounded-2xl overflow-hidden h-64 md:h-80 bg-gray-100">
+          <img
+            src={blogCoverImage(post.coverImage)}
+            alt={post.title}
+            className="w-full h-full object-cover"
+            onError={e => { (e.target as HTMLImageElement).src = blogCoverImage(null) }}
+          />
+        </div>
 
         {/* Excerpt */}
         {post.excerpt && (
@@ -183,13 +182,11 @@ export default function BlogPostPage() {
                 href={`/blog/${r.slug}`}
                 className="group block rounded-xl overflow-hidden bg-gray-50 border border-gray-200 hover:border-primary/30 transition-all"
               >
-                {r.coverImage && (
-                  <div className="h-32 overflow-hidden bg-gray-100">
-                    <img src={r.coverImage} alt={r.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                  </div>
-                )}
+                <div className="h-32 overflow-hidden bg-gray-100">
+                  <img src={blogCoverImage(r.coverImage)} alt={r.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    onError={e => { (e.target as HTMLImageElement).src = blogCoverImage(null) }} />
+                </div>
                 <div className="p-3">
                   <p className="text-gray-900 text-xs font-semibold line-clamp-2 group-hover:text-primary transition-colors">{r.title}</p>
                   <p className="text-gray-400 text-xs mt-1">{formatDate(r.publishedAt)}</p>
