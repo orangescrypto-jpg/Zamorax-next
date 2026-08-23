@@ -408,6 +408,8 @@ export function ListingDetailClient({ id, initialListing }: Props) {
       couponCode:     (!flashActive && appliedCoupon) ? appliedCoupon.code : undefined,
       quantity:       cartQuantity,
       shippingMethods: listing.shippingMethods ?? ["meetup"],
+      isFBZ:          listing.isFBZ,
+      deliveryFeeOverrideKobo: listing.deliveryFeeOverrideKobo,
       weightKg:       listing.weightKg,
       isFragile:      listing.isFragile,
       selectedColor:  selectedColor ?? undefined,
@@ -608,6 +610,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
               {listing.isFBZ && (
                 <Badge className="bg-amber-100 text-amber-700 border-0 gap-1">
                   <Zap className="h-3 w-3" /> Fulfilled by Zamorax
+                </Badge>
+              )}
+              {listing.isFBZ && listing.deliveryFeeOverrideKobo === 0 && (
+                <Badge className="bg-blue-100 text-blue-700 border-0 gap-1">
+                  <Truck className="h-3 w-3" /> Free Delivery
                 </Badge>
               )}
               {listing.isHubVerified && (
@@ -987,12 +994,16 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             </div>
           )}
 
-          {/* Location */}
+          {/* Location — hidden for official/Zamorax Direct listings, same
+              rule as ListingCard: backed by Zamorax itself, no seller
+              address relevant to the buyer. Views count still shows either way. */}
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 shrink-0" />
-              {listing.city}, {listing.nigerianState}
-            </span>
+            {!listing.isOfficial && (
+              <span className="flex items-center gap-1.5">
+                <MapPin className="h-4 w-4 shrink-0" />
+                {listing.city}, {listing.nigerianState}
+              </span>
+            )}
             {typeof listing.views === "number" && listing.views > 0 && (
               <span className="flex items-center gap-1">
                 <Eye className="h-4 w-4 shrink-0" />
@@ -1264,6 +1275,9 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             nigerianState: listing.nigerianState,
             estimatedDeliveryDays: listing.estimatedDeliveryDays,
             isFBZ: listing.isFBZ,
+            weightKg: listing.weightKg,
+            isFragile: listing.isFragile,
+            deliveryFeeOverrideKobo: listing.deliveryFeeOverrideKobo,
           }}
           // An accepted offer is a negotiated total for offer.quantity units
           // (default 1) — same rule as Add to Cart above — so Buy Now
