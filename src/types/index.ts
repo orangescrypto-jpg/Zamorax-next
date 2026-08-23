@@ -153,6 +153,15 @@ export interface Listing {
     expiresAt: string | FirestoreTimestamp                   // ISO string
     createdAt: string | FirestoreTimestamp
   } | null
+  // ── Standing discount — a plain, permanent price cut the seller sets at
+  // listing creation or edit. Unlike flashDeal, it has no expiry/countdown
+  // and is never labeled "Flash Deal" or "Discount" in the UI — it just
+  // shows as a struck-through original price next to the new price, like
+  // a normal marketplace listing (e.g. Jumia). Stays active until the
+  // seller turns it off or changes it.
+  standingDiscount?: {
+    discountPercent: number
+  } | null
   // ── Seller-set coupon code — set at listing creation, gated on
   // sub_settings.couponsEnabled. Unlike flashDeal (time-limited, admin-style),
   // a coupon has no expiry — it's a standing code buyers enter at checkout.
