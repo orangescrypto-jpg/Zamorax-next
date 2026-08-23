@@ -56,6 +56,11 @@ export async function GET(req: NextRequest) {
       createdAt:        r.created_at ?? null,
       fulfilledBy:      String(r.fulfilled_by ?? "seller"),
       isOfficial:       !!r.listing_is_pick || !!r.seller_is_official,
+      deliveryStreet:   String(r.delivery_street ?? ""),
+      deliveryCity:     String(r.delivery_city ?? ""),
+      deliveryState:    String(r.delivery_state ?? ""),
+      deliveryLGA:      String(r.delivery_lga ?? ""),
+      deliveryMethod:   String(r.delivery_method ?? ""),
     }))
 
     return NextResponse.json({ orders })
