@@ -152,6 +152,14 @@ export function ListingDetailClient({ id, initialListing }: Props) {
     ? Math.round(listing.priceSale * (1 - appliedCoupon.discountPercent / 100))
     : null
 
+  // Standing discount — plain, permanent price cut. No countdown, never
+  // labeled "flash"/"discount" in the UI. Only shown when no flash deal is
+  // active (flash deal takes visual priority).
+  const standingDiscountActive = !flashActive && !!listing?.standingDiscount?.discountPercent
+  const standingPrice = standingDiscountActive && listing?.standingDiscount
+    ? ListingsService.getFlashPrice(listing.priceSale, listing.standingDiscount.discountPercent)
+    : null
+
   const applyCoupon = () => {
     setCouponError(null)
     const code = couponInput.trim().toUpperCase()
@@ -393,7 +401,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
       // checked ahead of the plain flashPrice — otherwise a buyer at a
       // bulk quantity would get charged the 1-piece flash price instead
       // of their (also-discounted) bulk rate.
-      priceSale:      couponPrice ?? (isOfferPriced ? listing.priceSale : (bulkUnitPrice ?? flashPrice ?? listing.priceSale)),
+      priceSale:      couponPrice ?? (isOfferPriced ? listing.priceSale : (bulkUnitPrice ?? flashPrice ?? standingPrice ?? listing.priceSale)),
       // Passed through so the cart can re-resolve the correct total/unit
       // price whenever quantity changes in the drawer, instead of being
       // stuck with the per-unit rate captured at this exact quantity.
@@ -541,7 +549,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
   // bulkUnitPrice already includes the flash discount when active (see
   // resolvedBulkPrice), so it's checked ahead of the plain flashPrice —
   // otherwise selecting a bulk quantity would show the 1-piece flash price.
-  const displayPrice = couponPrice ?? bulkUnitPrice ?? flashPrice ?? listing.priceSale
+  const displayPrice = couponPrice ?? bulkUnitPrice ?? flashPrice ?? standingPrice ?? listing.priceSale
 
   return (
     <>
@@ -663,6 +671,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                   Code {appliedCoupon.code} applied — {appliedCoupon.discountPercent}% off
                 </div>
               </div>
+            ) : standingDiscountActive && standingPrice != null ? (
+              <div className="space-y-0.5">
+                <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(standingPrice, listing.unitOfSale)}</p>
+                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
+              </div>
             ) : (
               <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
             )}
@@ -700,6 +713,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                   <>
                     <p className="text-[10px] text-muted-foreground line-through">{formatPrice(listing.priceSale)}</p>
                     <p className="text-sm font-bold text-red-600">{formatPrice(flashPrice)}</p>
+                  </>
+                ) : standingDiscountActive && standingPrice != null ? (
+                  <>
+                    <p className="text-[10px] text-muted-foreground line-through">{formatPrice(listing.priceSale)}</p>
+                    <p className="text-sm font-bold text-foreground">{formatPrice(standingPrice)}</p>
                   </>
                 ) : (
                   <p className="text-sm font-bold text-foreground">{formatPrice(listing.priceSale)}</p>
@@ -840,7 +858,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
               ? acceptedOffer.agreedPrice
               : resolvedBulkPrice
                 ? resolvedBulkPrice.total
-                : (flashPrice ?? couponPrice ?? listing.priceSale) * panelQty
+                : (flashPrice ?? couponPrice ?? standingPrice ?? listing.priceSale) * panelQty
             const perPieceForDisplay = panelQty > 0 ? panelTotal / panelQty : panelTotal
             return (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5 space-y-1">
@@ -1268,7 +1286,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             // resolvedTotal below as the actual charge whenever bulk
             // pricing applies, so this ordering no longer needs to matter
             // for the total, only for what's shown per-unit in the modal.
-            priceSale:     couponPrice ?? bulkUnitPrice ?? flashPrice ?? listing.priceSale,
+            priceSale:     couponPrice ?? bulkUnitPrice ?? flashPrice ?? standingPrice ?? listing.priceSale,
             images:        listing.images,
             sellerId:      listing.sellerId,
             sellerName:    seller?.storeName || seller?.fullName,
