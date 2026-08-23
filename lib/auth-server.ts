@@ -24,6 +24,33 @@ function buildSupabaseFromRequest(req: NextRequest) {
   )
 }
 
+// adminFetch (lib/admin-fetch.ts) forces a fresh Supabase token before every
+// admin request specifically to dodge a stale/expired session cookie — but
+// buildSupabaseFromRequest above only ever reads cookies, so that fresh
+// token was silently ignored and a request could still fail on a cookie
+// that lagged behind. If the client sent "Authorization: Bearer <token>",
+// verify that token directly via getUser(token) instead of falling back to
+// cookies — this is the token adminFetch just refreshed, so it's the more
+// current credential when both are present.
+async function getUserFromRequest(req: NextRequest) {
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization")
+  const bearerToken = authHeader?.toLowerCase().startsWith("bearer ")
+    ? authHeader.slice(7).trim()
+    : null
+
+  const supabase = buildSupabaseFromRequest(req)
+
+  if (bearerToken) {
+    const { data, error } = await supabase.auth.getUser(bearerToken)
+    if (!error && data.user) return { user: data.user, error: null }
+    // Bearer token present but invalid/expired — fall through to cookies
+    // rather than failing outright, in case the cookie session is still good.
+  }
+
+  const { data, error } = await supabase.auth.getUser()
+  return { user: data.user, error }
+}
+
 // ── Role lookup from D1 ───────────────────────────────────────────────────────
 // nativeDB: pass context.env.DB from the calling route when running on
 // Cloudflare Pages so this uses the native binding instead of the HTTP API.
@@ -44,8 +71,7 @@ type AuthResult =
 
 // ── Core resolver ─────────────────────────────────────────────────────────────
 async function requireRole(req: NextRequest, allowedRoles: string[], nativeDB?: unknown): Promise<AuthResult> {
-  const supabase = buildSupabaseFromRequest(req)
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { user, error } = await getUserFromRequest(req)
 
   if (error || !user) {
     return {
@@ -83,8 +109,7 @@ export async function requireModerator(req: NextRequest, nativeDB?: unknown): Pr
 }
 
 export async function requireAuth(req: NextRequest, nativeDB?: unknown): Promise<AuthResult> {
-  const supabase = buildSupabaseFromRequest(req)
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { user, error } = await getUserFromRequest(req)
 
   if (error || !user) {
     return {
