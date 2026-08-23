@@ -21,7 +21,7 @@ import { Loader2, Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown, Uploa
 
 interface SiteBanner {
   id: string
-  placement: "header" | "footer"
+  placement: "header" | "header_slider" | "footer"
   title: string
   subtitle: string
   ctaLabel: string
@@ -33,7 +33,7 @@ interface SiteBanner {
   order: number
 }
 
-const EMPTY = (placement: "header" | "footer"): Omit<SiteBanner, "id"> => ({
+const EMPTY = (placement: "header" | "header_slider" | "footer"): Omit<SiteBanner, "id"> => ({
   placement,
   title: "",
   subtitle: "",
@@ -48,7 +48,7 @@ const EMPTY = (placement: "header" | "footer"): Omit<SiteBanner, "id"> => ({
 
 export default function AdminSiteBannersPage() {
   const { toast } = useToast()
-  const [tab, setTab] = useState<"header" | "footer">("header")
+  const [tab, setTab] = useState<"header" | "header_slider" | "footer">("header")
   const [banners, setBanners] = useState<SiteBanner[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -130,9 +130,12 @@ export default function AdminSiteBannersPage() {
         <h1 className="text-xl font-bold">Site Banners</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           The header banner is a long strip shown at the very top of the homepage.
-          The footer banner is a normal-sized promo card shown above the footer
-          on every page. Turn a banner off, or leave none active, and it simply
-          won't appear — no empty space is left behind.
+          The header slider is a large rotating banner (like a Jumia-style
+          slideshow) shown at the very top of the homepage — add multiple
+          active banners here and they'll auto-rotate with dots. The footer
+          banner is a normal-sized promo card shown above the footer on every
+          page. Turn a banner off, or leave none active, and it simply won't
+          appear — no empty space is left behind.
         </p>
       </div>
 
@@ -140,23 +143,24 @@ export default function AdminSiteBannersPage() {
         ✅ Changes go live instantly — no redeploy needed.
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "header" | "footer")}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "header" | "header_slider" | "footer")}>
         <TabsList>
           <TabsTrigger value="header">Header Strip</TabsTrigger>
+          <TabsTrigger value="header_slider">Header Slider</TabsTrigger>
           <TabsTrigger value="footer">Footer Banner</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="space-y-4 mt-4">
           <div className="flex justify-end">
             <Button onClick={() => setAdding(true)} className="bg-primary text-white gap-2">
-              <Plus className="h-4 w-4" /> Add {tab === "header" ? "Header" : "Footer"} Banner
+              <Plus className="h-4 w-4" /> Add {tab === "header" ? "Header" : tab === "header_slider" ? "Slider" : "Footer"} Banner
             </Button>
           </div>
 
           {adding && (
             <Card className="border-primary/30 shadow-md">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">New {tab === "header" ? "Header Strip" : "Footer"} Banner</CardTitle>
+                <CardTitle className="text-base">New {tab === "header" ? "Header Strip" : tab === "header_slider" ? "Header Slider" : "Footer"} Banner</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <BannerForm banner={draft} onChange={setDraft} placement={tab} />
@@ -205,7 +209,7 @@ function BannerForm({
   banner, onChange, placement }: {
   banner: Omit<SiteBanner, "id">
   onChange: (b: Omit<SiteBanner, "id">) => void
-  placement: "header" | "footer"
+  placement: "header" | "header_slider" | "footer"
 }) {
   const { toast } = useToast()
   const { user } = useAuth()
@@ -217,16 +221,23 @@ function BannerForm({
     setUploading(true)
     try {
       const raw = e.target.files[0]
-      // Compress before upload — header strips are wide/short, footer banners
-      // wider still; cap at 1920px so the source stays sharp on large screens
-      // without ballooning file size.
-      const file = await imageCompression(raw, {
-        maxSizeMB:        1,
-        maxWidthOrHeight: 1920,
-        useWebWorker:     true,
-        fileType:         "image/webp",
-      })
-      const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.webp`
+      // GIFs must skip compression entirely — imageCompression() always
+      // re-encodes to a static webp, which silently strips the animation.
+      // Upload the original GIF bytes as-is so it stays animated.
+      const isGif = raw.type === "image/gif" || /\.gif$/i.test(raw.name)
+      const file = isGif
+        ? raw
+        : await imageCompression(raw, {
+            // Compress before upload — header strips are wide/short, footer
+            // banners wider still; cap at 1920px so the source stays sharp
+            // on large screens without ballooning file size.
+            maxSizeMB:        1,
+            maxWidthOrHeight: 1920,
+            useWebWorker:     true,
+            fileType:         "image/webp",
+          })
+      const ext  = isGif ? "gif" : "webp"
+      const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.${ext}`
       const result = await StorageService.uploadFile(file, path)
       set("imageUrl")(result.url)
       toast({ title: "Image uploaded ✅" })
@@ -248,8 +259,10 @@ function BannerForm({
         <Label>Banner image (optional)</Label>
         <p className="text-xs text-muted-foreground">
           {placement === "header"
-            ? "Upload a pre-made wide strip image (recommended ~1500×120px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies."
-            : "Upload a pre-made banner image (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies."}
+            ? "Upload a pre-made wide strip image (recommended ~1500×120px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."
+            : placement === "header_slider"
+              ? "Upload a pre-made wide slide image (recommended ~1600×500px). Add several active slides here and they'll auto-rotate with dots, like a Jumia-style homepage slider. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."
+              : "Upload a pre-made banner image (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."}
         </p>
 
         {banner.imageUrl ? (
@@ -283,7 +296,7 @@ function BannerForm({
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Title</Label>
           <Input
-            placeholder={placement === "header" ? "e.g. Free delivery on orders over ₦20,000" : "e.g. Become a Zamorax Seller Today"}
+            placeholder={placement === "header" ? "e.g. Free delivery on orders over ₦20,000" : placement === "header_slider" ? "e.g. Big Phone Sale" : "e.g. Become a Zamorax Seller Today"}
             value={banner.title}
             onChange={e => set("title")(e.target.value)}
           />
@@ -291,7 +304,7 @@ function BannerForm({
         <div className="space-y-1.5 sm:col-span-2">
           <Label>Subtitle {placement === "header" && "(optional — keep short, it's a single line)"}</Label>
           <Input
-            placeholder={placement === "header" ? "Ends this weekend" : "Reach thousands of buyers across Nigeria"}
+            placeholder={placement === "header" ? "Ends this weekend" : placement === "header_slider" ? "Up to 30% off this week" : "Reach thousands of buyers across Nigeria"}
             value={banner.subtitle}
             onChange={e => set("subtitle")(e.target.value)}
           />
@@ -328,7 +341,7 @@ function BannerCard({
   banner, placement, isFirst, isLast, saving,
   onSave, onDelete, onMove, onToggle }: {
   banner: SiteBanner
-  placement: "header" | "footer"
+  placement: "header" | "header_slider" | "footer"
   isFirst: boolean
   isLast: boolean
   saving: boolean
