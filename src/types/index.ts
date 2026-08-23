@@ -111,6 +111,8 @@ export interface Listing {
   isHubVerified: boolean
   /** True once admin has activated FBZ (Fulfilled by Zamorax) for this listing — the seller's stock physically arrived at, and was inspected in, a Zamorax warehouse. Shown to buyers as a stronger trust signal than a regular listing. Set by admin/fbz intake, not the seller. */
   isFBZ?: boolean
+  /** Kobo — when set (including 0), overrides the calculated FBZ delivery fee for this specific listing. 0 = free delivery on this listing regardless of buyer state/weight. Undefined/null = use the normal zone-based calculation. */
+  deliveryFeeOverrideKobo?: number | null
   isActive: boolean
   isBoosted: boolean
   // Admin has chosen to showcase this listing under Zamorax Direct, even
@@ -328,6 +330,8 @@ export interface CartItem {
   // derive FBZ eligibility from shippingMethods alone, which just
   // reflects delivery methods the seller opted into.
   isFBZ?: boolean
+  /** Kobo — carried from listing.deliveryFeeOverrideKobo. 0 = free delivery on this item regardless of buyer state/weight. */
+  deliveryFeeOverrideKobo?: number | null
   weightKg?: number
   isFragile?: boolean
   // Fashion variant selection — set when the listing offers multiple
