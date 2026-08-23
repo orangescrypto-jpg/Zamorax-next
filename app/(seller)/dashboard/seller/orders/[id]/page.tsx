@@ -469,8 +469,14 @@ export default function SellerOrderDetailPage({ params }: { params: { id: string
               <span className="font-medium">{order.buyerName || "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Buyer State</span>
-              <span>{order.buyerState || order.deliveryState || "—"}</span>
+              <span className="text-muted-foreground">Delivery Address</span>
+              <span className="text-right max-w-[60%]">
+                {[order.deliveryStreet ?? (order as any).delivery_street,
+                  order.deliveryLGA ?? (order as any).delivery_lga,
+                  order.deliveryCity ?? (order as any).delivery_city,
+                  order.buyerState || order.deliveryState || (order as any).delivery_state]
+                  .filter(Boolean).join(", ") || "—"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type</span>
