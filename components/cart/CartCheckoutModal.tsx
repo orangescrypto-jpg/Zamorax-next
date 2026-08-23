@@ -169,12 +169,30 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, step])
 
-  // Auto-select meetup as default delivery
+  // Auto-select a sensible default delivery method per seller group.
+  // FIX: this always defaulted every group to "meetup" regardless of
+  // what that seller's listings actually offer — on an FBZ-only group
+  // (shippingMethods === ["fbz"], meetup not rendered at all per the
+  // methods.includes("meetup") check below), that left the group with no
+  // delivery option actually selected/highlighted even though only one
+  // was shown, and let a buyer proceed with deliverySelections silently
+  // defaulted to a method the seller never offered. Pick the group's
+  // first genuinely available method instead of hardcoding meetup.
   useEffect(() => {
     if (step !== 2) return
     const defaults: Record<string, DeliverySelection> = {}
     sellerIds.forEach(sid => {
-      if (!deliverySelections[sid]) {
+      if (deliverySelections[sid]) return
+      const items = grouped[sid]
+      const methods = items[0]?.shippingMethods ?? ["meetup"]
+      const allItemsFBZ = items.every(i => i.isFBZ)
+      if (methods.includes("meetup")) {
+        defaults[sid] = { method: "meetup", fee: 0 }
+      } else if (methods.includes("zamorax_logistics")) {
+        defaults[sid] = { method: "zamorax_logistics", fee: sellerZlaFees[sid] ?? 0 }
+      } else if (allItemsFBZ) {
+        defaults[sid] = { method: "fbz", fee: sellerFbzFees[sid] ?? 0 }
+      } else {
         defaults[sid] = { method: "meetup", fee: 0 }
       }
     })
@@ -182,7 +200,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       setDeliverySelections(prev => ({ ...prev, ...defaults }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
+  }, [step, grouped, sellerFbzFees, sellerZlaFees])
 
   const handleStep1Next = () => {
     if (!street.trim() || !city.trim() || !state || !lga.trim()) {
