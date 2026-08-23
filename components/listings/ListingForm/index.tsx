@@ -189,8 +189,13 @@ export function ListingForm() {
         .filter(t => t && t.minQty != null && t.price != null)
         .map(t => ({ minQty: t.minQty, price: t.price * 100 }))
 
+      // Enforce single-select at submit time too, not just in the Step5b UI —
+      // a draft saved before this became single-select could still be
+      // carrying an old multi-method array (e.g. ["meetup","fbz"]), which
+      // silently let checkout fall back to meetup any time FBZ wasn't
+      // actually available yet. Keep only the first method chosen.
       const shippingMethods = (data.shippingMethods && data.shippingMethods.length > 0)
-        ? data.shippingMethods
+        ? [data.shippingMethods[0]]
         : ["meetup"]
       const isFbzChosen = shippingMethods.includes("fbz")
 
