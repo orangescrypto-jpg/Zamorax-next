@@ -580,6 +580,12 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                       -{listing.flashDeal.discountPercent}% OFF
                     </span>
                   </div>
+                ) : standingDiscountActive && listing.standingDiscount ? (
+                  <div className="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
+                    <span className="bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-md">
+                      -{listing.standingDiscount.discountPercent}% OFF
+                    </span>
+                  </div>
                 ) : null
               }
             />
@@ -654,7 +660,12 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             {flashActive && flashPrice != null ? (
               <div className="space-y-0.5">
                 <p className="text-3xl font-extrabold text-red-600">{formatPriceWithUnit(flashPrice, listing.unitOfSale)}</p>
-                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
+                  <span className="text-xs font-bold text-red-600 bg-red-50 rounded px-1.5 py-0.5">
+                    -{listing.flashDeal!.discountPercent}%
+                  </span>
+                </div>
                 {flashCountdown && (
                   <div className="flex items-center gap-1.5 text-sm text-red-600 font-semibold bg-red-50 rounded-lg px-2.5 py-1.5 w-fit">
                     <Flame className="h-3.5 w-3.5" />
@@ -674,7 +685,12 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             ) : standingDiscountActive && standingPrice != null ? (
               <div className="space-y-0.5">
                 <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(standingPrice, listing.unitOfSale)}</p>
-                <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground line-through">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
+                  <span className="text-xs font-bold text-orange-600 bg-orange-50 rounded px-1.5 py-0.5">
+                    -{listing.standingDiscount!.discountPercent}%
+                  </span>
+                </div>
               </div>
             ) : (
               <p className="text-3xl font-extrabold text-primary">{formatPriceWithUnit(listing.priceSale, listing.unitOfSale)}</p>
