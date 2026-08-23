@@ -109,6 +109,8 @@ export interface Listing {
   verificationVideo?: string
   attributes: Record<string, any>
   isHubVerified: boolean
+  /** True once admin has activated FBZ (Fulfilled by Zamorax) for this listing — the seller's stock physically arrived at, and was inspected in, a Zamorax warehouse. Shown to buyers as a stronger trust signal than a regular listing. Set by admin/fbz intake, not the seller. */
+  isFBZ?: boolean
   isActive: boolean
   isBoosted: boolean
   // Admin has chosen to showcase this listing under Zamorax Direct, even
