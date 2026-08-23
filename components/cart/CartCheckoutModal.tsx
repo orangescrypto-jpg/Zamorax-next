@@ -94,6 +94,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
   const [coverageLoading,    setCoverageLoading]    = useState<Record<string, boolean>>({})
   const [sellerZlaCoverage,  setSellerZlaCoverage]  = useState<Record<string, boolean>>({})
   const [sellerZlaFees,      setSellerZlaFees]      = useState<Record<string, number>>({})
+  const [sellerFbzFees,      setSellerFbzFees]      = useState<Record<string, number>>({})
 
   const grouped   = getCartGrouped()
   const sellerIds = Object.keys(grouped)
@@ -123,6 +124,46 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
         setSellerZlaCoverage(prev => ({ ...prev, [sellerId]: false }))
       } finally {
         setCoverageLoading(prev => ({ ...prev, [sellerId]: false }))
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, step])
+
+  // FBZ Express fee — same zone-based LogisticsService pricing engine as
+  // ZLA above, but "from" is the state of the nearest active FBZ warehouse
+  // (the actual dispatch point), not the seller's own state — the seller
+  // isn't shipping it, Zamorax is, from wherever the stock physically sits.
+  useEffect(() => {
+    if (!state || step !== 2) return
+
+    sellerIds.forEach(async (sellerId) => {
+      const items = grouped[sellerId]
+      if (!items.every(i => i.isFBZ)) return
+      // If every item in this group has a matching manual override (e.g.
+      // 0 for free delivery), skip live pricing and use it directly —
+      // sum the per-item overrides rather than calling the pricing API.
+      if (items.every(i => i.deliveryFeeOverrideKobo != null)) {
+        const total = items.reduce((sum, i) => sum + (i.deliveryFeeOverrideKobo ?? 0), 0)
+        setSellerFbzFees(prev => ({ ...prev, [sellerId]: total }))
+        return
+      }
+
+      try {
+        const { fbzWarehouses } = await ShippingService.getConfig()
+        const active = fbzWarehouses.filter(w => w.isActive)
+        if (!active.length) return
+
+        // Prefer a warehouse already in the buyer's state (cheapest/fastest
+        // — same_state pricing), else fall back to the first active one.
+        const warehouse   = active.find(w => w.state === state) ?? active[0]
+        const totalWeight = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
+        const hasFragile  = items.some(i => i.isFragile)
+        const pricing      = await LogisticsService.getPricing()
+        const feeBreakdown = LogisticsService.calculateFee(warehouse.state, state, pricing, { weightKg: totalWeight, isFragile: hasFragile })
+        setSellerFbzFees(prev => ({ ...prev, [sellerId]: feeBreakdown.total }))
+      } catch {
+        // Leave fee unset — DeliveryOption below falls back to 0 rather
+        // than silently blocking checkout on a pricing-fetch failure.
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -456,11 +497,11 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         )}
                         {allItemsFBZ && settings.fbzEnabled && (settings.fbzCoveredStates?.length ?? 0) > 0 && (
                           <DeliveryOption
-                            label="Fulfilled by Zamorax"
+                            label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Fulfilled by Zamorax — Free Delivery" : "Fulfilled by Zamorax"}
                             desc="Handled from our warehouse — ships nationwide"
-                            fee={0}
+                            fee={sellerFbzFees[sellerId] ?? 0}
                             selected={selected?.method === "fbz"}
-                            onSelect={() => setDeliverySelections(prev => ({ ...prev, [sellerId]: { method: "fbz", fee: 0 } }))}
+                            onSelect={() => setDeliverySelections(prev => ({ ...prev, [sellerId]: { method: "fbz", fee: sellerFbzFees[sellerId] ?? 0 } }))}
                           />
                         )}
                       </div>
