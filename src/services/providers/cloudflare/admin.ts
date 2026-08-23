@@ -24,6 +24,21 @@ function quoteCol(col: string): string {
   return SQL_RESERVED_COLUMNS.has(col.toLowerCase()) ? `"${col}"` : col
 }
 
+// FIX: the naive /([A-Z])/g -> "_$1" conversion inserts an underscore before
+// EVERY capital letter, so a run of capitals (an acronym) gets split one
+// letter at a time — "isFBZ" became "is_f_b_z" instead of "is_fbz", which
+// broke every FBZ activation with "no such column: is_f_b_z: SQLITE_ERROR"
+// even though the real column (is_fbz) exists. This treats a run of two or
+// more consecutive capitals as a single acronym block (only underscoring
+// before the block, not inside it), while still handling ordinary
+// camelCase boundaries ("sellerId" -> "seller_id") the same as before.
+function camelToSnake(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z]+)/g, (_m, a, caps) => `${a}_${caps}`)
+    .replace(/([A-Z]+)([A-Z][a-z])/g, (_m, caps, tail) => `${caps}_${tail}`)
+    .toLowerCase()
+}
+
 // ── D1 HTTP helper ───────────────────────────────────────────────
 export async function d1Query<T = Record<string, unknown>>(
   sql:    string,
@@ -213,7 +228,7 @@ function poll(
 
 // ── Shared constraint → SQL builder ──────────────────────────────
 function buildSelectQuery(table: string, constraints?: unknown[]): { sql: string; vals: unknown[] } {
-  const toCol = (f: string) => quoteCol(f.replace(/([A-Z])/g, "_$1").toLowerCase())
+  const toCol = (f: string) => quoteCol(camelToSnake(f))
 
   const wheres: string[] = []
   const vals: unknown[] = []
@@ -451,7 +466,7 @@ export const AdminService: IAdminService = {
   },
 
   subscribeToCollection(path, callback, constraints, onError) {
-    const table = path.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(path).replace(/^_/, "")
     const { sql, vals } = buildSelectQuery(table, constraints)
     return poll(
       async () => (await d1Query(sql, vals)).map(rowToDoc),
@@ -469,8 +484,8 @@ export const AdminService: IAdminService = {
   },
 
   subscribeToCollectionWhere(path, field, op, value, callback) {
-    const table  = path.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
-    const col    = field.replace(/([A-Z])/g, "_$1").toLowerCase()
+    const table  = camelToSnake(path).replace(/^_/, "")
+    const col    = camelToSnake(field)
     const sqlOp  = op === "==" ? "=" : op
     return poll(
       async () => (await d1Query(`SELECT * FROM ${table} WHERE ${col} ${sqlOp} ? ORDER BY created_at DESC`, [value])).map(rowToDoc),
@@ -481,7 +496,7 @@ export const AdminService: IAdminService = {
   },
 
   subscribeToDoc(path, docId, callback, onError) {
-    const table = path.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(path).replace(/^_/, "")
     const pk    = pkColumn(table)
     return poll(async () => {
       try {
@@ -502,7 +517,7 @@ export const AdminService: IAdminService = {
   },
 
   async getCollection(path, constraints) {
-    const table = path.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(path).replace(/^_/, "")
     const { sql, vals } = buildSelectQuery(table, constraints)
     try {
       const rows = await d1Query(sql, vals)
@@ -513,7 +528,7 @@ export const AdminService: IAdminService = {
   },
 
   async updateDoc(collectionPath, docId, data) {
-    const table = collectionPath.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(collectionPath).replace(/^_/, "")
     const now   = new Date().toISOString()
     const sets: string[] = hasUpdatedAt(table) ? ["updated_at = ?"] : []
     const vals: unknown[] = hasUpdatedAt(table) ? [now] : []
@@ -531,7 +546,7 @@ export const AdminService: IAdminService = {
 
     for (const [k, v] of Object.entries(data)) {
       if (["updatedAt","updated_at","createdAt","created_at"].includes(k)) continue
-      const col  = k.replace(/([A-Z])/g, "_$1").toLowerCase()
+      const col  = camelToSnake(k)
       const qcol = quoteCol(col) // for SQL fragments only — `col` (unquoted) still indexes currentRow as a plain JS object below
 
       // Firestore-shim sentinels (increment/arrayUnion/arrayRemove) were being
@@ -571,7 +586,7 @@ export const AdminService: IAdminService = {
   },
 
   async addDoc(collectionPath, data) {
-    const table = collectionPath.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(collectionPath).replace(/^_/, "")
     const id    = crypto.randomUUID()
     const now   = new Date().toISOString()
 
@@ -583,7 +598,7 @@ export const AdminService: IAdminService = {
 
     for (const [k, v] of Object.entries(data)) {
       if (["createdAt","updatedAt","created_at","updated_at"].includes(k)) continue
-      const col = k.replace(/([A-Z])/g, "_$1").toLowerCase()
+      const col = camelToSnake(k)
       cols.push(quoteCol(col))
       placeholders.push("?")
       vals.push(typeof v === "boolean" ? (v ? 1 : 0) : v)
@@ -597,7 +612,7 @@ export const AdminService: IAdminService = {
   },
 
   async deleteDoc(collectionPath, docId) {
-    const table = collectionPath.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(collectionPath).replace(/^_/, "")
     await d1Query(`DELETE FROM ${table} WHERE ${pkColumn(table)} = ?`, [docId])
   },
 
@@ -612,7 +627,7 @@ export const AdminService: IAdminService = {
       return
     }
 
-    const table = collectionPath.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(collectionPath).replace(/^_/, "")
     const pk    = pkColumn(table)
     const now   = new Date().toISOString()
 
@@ -633,7 +648,7 @@ export const AdminService: IAdminService = {
 
     for (const [k, v] of Object.entries(data)) {
       if (["createdAt","updatedAt","created_at","updated_at"].includes(k)) continue
-      const col = k.replace(/([A-Z])/g, "_$1").toLowerCase()
+      const col = camelToSnake(k)
       cols.push(col)
       placeholders.push("?")
       const sqlVal = typeof v === "boolean" ? (v ? 1 : 0) : v
@@ -661,7 +676,7 @@ export const AdminService: IAdminService = {
       return kvGet(docId) as any
     }
 
-    const table = collectionPath.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")
+    const table = camelToSnake(collectionPath).replace(/^_/, "")
     try {
       const rows  = await d1Query(`SELECT * FROM ${table} WHERE ${pkColumn(table)} = ? LIMIT 1`, [docId])
       if (!rows[0]) return null
