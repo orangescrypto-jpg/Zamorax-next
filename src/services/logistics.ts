@@ -4,7 +4,17 @@
 // All fee reads go through here. Never hardcode fees in components.
 // ─────────────────────────────────────────────────────────────────
 
-import { AdminService } from "@/src/services/admin"
+// FIX: this used to read via AdminService.getDoc("config","platform"), which
+// hits a D1 kv_store row keyed "config:platform" — a row NOTHING ever writes.
+// The admin Settings UI (FBZRatesTab / LogisticsRatesTab / everything else)
+// saves through POST /api/admin/settings, which writes a totally different
+// row keyed "platform_settings". So this service was permanently reading an
+// empty/stale row and silently falling back to defaults no matter what admin
+// saved (turning ZLA off never took effect, FBZ pricing overrides never
+// applied). Switch to the same getPlatformSettings() every other admin-driven
+// read in the app already uses — it fetches /api/admin/settings, is cached,
+// and is invalidated by invalidateSettingsCache() right after every admin save.
+import { getPlatformSettings } from "@/src/services/platformSettings"
 
 // ─── Zone Map ────────────────────────────────────────────────────
 export type DeliveryZone =
@@ -150,38 +160,89 @@ function matchWeightTier(weightKg: number, tiers: WeightTier[]): number {
   return sorted[sorted.length - 1].priceKobo
 }
 
+// ─── FBZ — independent pricing defaults (kobo) ────────────────────
+// FBZ used to just reuse ZLA's pricing engine wholesale (same D1 config,
+// same zone table). Now it gets its own mirror of the exact same shape
+// (zone base / route overrides / weight tiers / doorstep / fragile), keyed
+// under fbz*-prefixed settings fields, so admin can price FBZ independently
+// of ZamoraxLogic. Defaults start identical to ZLA's until admin edits them.
+export const DEFAULT_FBZ_ZONE_PRICES: Record<string, number>  = { ...DEFAULT_ZONE_PRICES }
+export const DEFAULT_FBZ_ROUTE_OVERRIDES: Record<string, number> = { ...DEFAULT_ROUTE_OVERRIDES }
+export const DEFAULT_FBZ_WEIGHT_TIERS: WeightTier[] = [...DEFAULT_WEIGHT_TIERS]
+
+const FBZ_PRICING_DEFAULTS: LogisticsPricingSnapshot = {
+  zonePrices:        DEFAULT_FBZ_ZONE_PRICES,
+  routeOverrides:    DEFAULT_FBZ_ROUTE_OVERRIDES,
+  weightTiers:       DEFAULT_FBZ_WEIGHT_TIERS,
+  doorstepFeeKobo:   50000,   // ₦500
+  fragileFeeKobo:    30000,   // ₦300
+}
+
+// Shared: pull a weight-tier array out of a raw settings blob, with the
+// same legacy threshold/per-kg back-compat synthesis, under whichever key
+// prefix is passed in ("zla" or "fbz").
+function readWeightTiers(
+  doc: Record<string, any>,
+  tiersKey: string,
+  legacyThresholdKey: string,
+  legacyPerKgKey: string,
+  fallback: WeightTier[],
+): WeightTier[] {
+  const savedTiers = doc[tiersKey] as WeightTier[] | undefined
+  if (Array.isArray(savedTiers) && savedTiers.length > 0) return savedTiers
+  const legacyThreshold = doc[legacyThresholdKey]
+  const legacyPerKg     = doc[legacyPerKgKey]
+  if (legacyThreshold != null && legacyPerKg != null) {
+    return [
+      { minKg: 0, maxKg: legacyThreshold, priceKobo: 0 },
+      { minKg: legacyThreshold, maxKg: null, priceKobo: Math.round(legacyPerKg) },
+    ]
+  }
+  return fallback
+}
+
 // ─── Service ──────────────────────────────────────────────────────
 export const LogisticsService = {
 
   async getPricing(): Promise<LogisticsPricingSnapshot> {
     try {
-      const doc = await AdminService.getDoc("config", "platform")
+      const doc = await getPlatformSettings() as unknown as Record<string, any>
       if (!doc) return PRICING_DEFAULTS
-      // Back-compat: older saved settings may only have the flat
-      // threshold/per-kg fields (zlaWeightThreshold/zlaWeightPerKgKobo) and
-      // no zlaWeightTiers array yet — synthesize an equivalent 2-tier setup
-      // from those so pricing doesn't silently reset to defaults the first
-      // time this loads after the upgrade.
-      const savedTiers = (doc as any).zlaWeightTiers as WeightTier[] | undefined
-      const legacyThreshold = (doc as any).zlaWeightThreshold
-      const legacyPerKg     = (doc as any).zlaWeightPerKgKobo
-      const weightTiers = Array.isArray(savedTiers) && savedTiers.length > 0
-        ? savedTiers
-        : (legacyThreshold != null && legacyPerKg != null)
-          ? [
-              { minKg: 0, maxKg: legacyThreshold, priceKobo: 0 },
-              { minKg: legacyThreshold, maxKg: null, priceKobo: Math.round(legacyPerKg) },
-            ]
-          : DEFAULT_WEIGHT_TIERS
+      const weightTiers = readWeightTiers(
+        doc, "zlaWeightTiers", "zlaWeightThreshold", "zlaWeightPerKgKobo", DEFAULT_WEIGHT_TIERS,
+      )
       return {
-        zonePrices:        (doc as any).zlaZonePrices      ?? DEFAULT_ZONE_PRICES,
-        routeOverrides:    (doc as any).zlaRouteOverrides   ?? DEFAULT_ROUTE_OVERRIDES,
+        zonePrices:        doc.zlaZonePrices     ?? DEFAULT_ZONE_PRICES,
+        routeOverrides:    doc.zlaRouteOverrides  ?? DEFAULT_ROUTE_OVERRIDES,
         weightTiers,
-        doorstepFeeKobo:   (doc as any).zlaDoorstepFee      ?? PRICING_DEFAULTS.doorstepFeeKobo,
-        fragileFeeKobo:    (doc as any).zlaFragileFee       ?? PRICING_DEFAULTS.fragileFeeKobo,
+        doorstepFeeKobo:   doc.zlaDoorstepFee     ?? PRICING_DEFAULTS.doorstepFeeKobo,
+        fragileFeeKobo:    doc.zlaFragileFee      ?? PRICING_DEFAULTS.fragileFeeKobo,
       }
     } catch {
       return PRICING_DEFAULTS
+    }
+  },
+
+  // FBZ's own independent pricing snapshot — same shape, separate
+  // fbz*-prefixed keys, so admin can price FBZ Express differently from
+  // ZamoraxLogic. Falls back to FBZ-specific defaults (which start as a
+  // copy of ZLA's) rather than ZLA's live config.
+  async getFbzPricing(): Promise<LogisticsPricingSnapshot> {
+    try {
+      const doc = await getPlatformSettings() as unknown as Record<string, any>
+      if (!doc) return FBZ_PRICING_DEFAULTS
+      const weightTiers = readWeightTiers(
+        doc, "fbzWeightTiers", "fbzWeightThreshold", "fbzWeightPerKgKobo", DEFAULT_FBZ_WEIGHT_TIERS,
+      )
+      return {
+        zonePrices:        doc.fbzZonePrices     ?? DEFAULT_FBZ_ZONE_PRICES,
+        routeOverrides:    doc.fbzRouteOverrides  ?? DEFAULT_FBZ_ROUTE_OVERRIDES,
+        weightTiers,
+        doorstepFeeKobo:   doc.fbzDoorstepFee     ?? FBZ_PRICING_DEFAULTS.doorstepFeeKobo,
+        fragileFeeKobo:    doc.fbzFragileFee      ?? FBZ_PRICING_DEFAULTS.fragileFeeKobo,
+      }
+    } catch {
+      return FBZ_PRICING_DEFAULTS
     }
   },
 
@@ -236,5 +297,18 @@ export const LogisticsService = {
   ): Promise<DeliveryFeeBreakdown> {
     const pricing = await this.getPricing()
     return this.calculateFee(fromState, toState, pricing, opts)
+  },
+
+  // FBZ equivalent of getDeliveryFee — always priced from the WAREHOUSE's
+  // state (where the seller dropped the goods off) to the buyer's state,
+  // never the seller's own state, since Zamorax (not the seller) ships it.
+  // Uses FBZ's own independent rate table (getFbzPricing), not ZLA's.
+  async getFbzDeliveryFee(
+    warehouseState: string,
+    buyerState:     string,
+    opts: { weightKg?: number; isDoorstep?: boolean; isFragile?: boolean } = {}
+  ): Promise<DeliveryFeeBreakdown> {
+    const pricing = await this.getFbzPricing()
+    return this.calculateFee(warehouseState, buyerState, pricing, opts)
   },
 }
