@@ -148,10 +148,50 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
     Array.isArray(listing.shippingMethods) &&
     listing.shippingMethods.length === 1 &&
     listing.shippingMethods[0] === "fbz"
-  const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">(
+  // ZamoraxLogic — only offered when the listing itself opted into it AND
+  // admin currently has ZLA switched on (zlaAvailable, resolved below from
+  // ShippingService.getConfig — same source Step5bShipment uses, so this
+  // modal never offers a method the seller/admin no longer allow).
+  const zlaOffered =
+    Array.isArray(listing.shippingMethods) && listing.shippingMethods.includes("zamorax_logistics")
+  const [zlaAvailable, setZlaAvailable] = useState(false)
+  const [zlaCovered, setZlaCovered] = useState(false)
+  const [zlaFee, setZlaFee] = useState(0)
+  useEffect(() => {
+    if (!zlaOffered) return
+    ShippingService.getConfig().then(cfg => setZlaAvailable(cfg.zlaEnabled))
+  }, [zlaOffered])
+
+  const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz" | "zamorax_logistics">(
     fbzAvailable && listingDefaultsToFbz ? "fbz" : "meetup"
   )
   const [fbzFee, setFbzFee] = useState(0)
+
+  // ZLA fee + coverage — same zone-based LogisticsService pricing engine
+  // FBZ uses below, but "from" is the seller's own state (they're
+  // shipping it, not Zamorax).
+  useEffect(() => {
+    if (!zlaOffered || !zlaAvailable || !state || !listing.nigerianState) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const coverage = await ShippingService.getCoverageForStates(listing.nigerianState!, state)
+        if (cancelled) return
+        setZlaCovered(coverage.bothCovered)
+        if (coverage.bothCovered) {
+          const pricing = await LogisticsService.getPricing()
+          const feeBreakdown = LogisticsService.calculateFee(
+            listing.nigerianState!, state, pricing,
+            { weightKg: listing.weightKg, isFragile: listing.isFragile },
+          )
+          if (!cancelled) setZlaFee(feeBreakdown.total)
+        }
+      } catch {
+        if (!cancelled) setZlaCovered(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [zlaOffered, zlaAvailable, state])
 
   // FBZ Express fee — same zone-based LogisticsService pricing used across
   // the app, dispatched from the nearest active FBZ warehouse (not the
@@ -216,7 +256,9 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // live-calculated fbzFee, which is 0 until pricing has loaded.
   const deliveryFeeKobo = deliveryMethod === "fbz"
     ? (listing.deliveryFeeOverrideKobo ?? fbzFee)
-    : 0
+    : deliveryMethod === "zamorax_logistics"
+      ? zlaFee
+      : 0
   const buyerTotalWithDeliveryKobo = breakdown.buyerTotalKobo + deliveryFeeKobo
 
   const sellerDisplayName =
@@ -572,7 +614,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       ))}
                     </select>
                   </div>
-                  {fbzAvailable && !listingDefaultsToFbz && (
+                  {(fbzAvailable || (zlaOffered && zlaAvailable)) && !listingDefaultsToFbz && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">Delivery method</Label>
                       <div className="grid grid-cols-2 gap-2">
@@ -588,28 +630,46 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                           <p className="text-xs font-semibold">Standard</p>
                           <p className="text-[10px] text-muted-foreground">Arrange with seller</p>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeliveryMethod("fbz")}
-                          className={`text-left p-2.5 rounded-lg border-2 transition-all ${
-                            deliveryMethod === "fbz"
-                              ? "border-amber-500 bg-amber-50"
-                              : "border-amber-200 bg-amber-50/50 hover:border-amber-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-1">
-                            <p className="text-xs font-semibold">FBZ Express</p>
-                            <span className="text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1">⚡</span>
-                            {listing.deliveryFeeOverrideKobo === 0 && (
-                              <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">
-                            {listing.deliveryFeeOverrideKobo === 0
-                              ? "Shipped from Zamorax warehouse"
-                              : `Shipped from Zamorax warehouse${fbzFee > 0 ? ` · ${formatPrice(listing.deliveryFeeOverrideKobo ?? fbzFee)}` : ""}`}
-                          </p>
-                        </button>
+                        {fbzAvailable && (
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryMethod("fbz")}
+                            className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                              deliveryMethod === "fbz"
+                                ? "border-amber-500 bg-amber-50"
+                                : "border-amber-200 bg-amber-50/50 hover:border-amber-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs font-semibold">FBZ Express</p>
+                              <span className="text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1">⚡</span>
+                              {listing.deliveryFeeOverrideKobo === 0 && (
+                                <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              {listing.deliveryFeeOverrideKobo === 0
+                                ? "Shipped from Zamorax warehouse"
+                                : `Shipped from Zamorax warehouse${fbzFee > 0 ? ` · ${formatPrice(listing.deliveryFeeOverrideKobo ?? fbzFee)}` : ""}`}
+                            </p>
+                          </button>
+                        )}
+                        {!fbzAvailable && zlaOffered && zlaAvailable && state && zlaCovered && (
+                          <button
+                            type="button"
+                            onClick={() => setDeliveryMethod("zamorax_logistics")}
+                            className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                              deliveryMethod === "zamorax_logistics"
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:border-primary/40"
+                            }`}
+                          >
+                            <p className="text-xs font-semibold">ZamoraxLogic</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              Door delivery{zlaFee > 0 ? ` · ${formatPrice(zlaFee)}` : ""}
+                            </p>
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -632,9 +692,29 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                     <p className="text-[11px] text-blue-700">
                       {deliveryMethod === "fbz"
                         ? "Ships nationwide from our warehouse — no need to coordinate with the seller."
-                        : <>You can also arrange <strong>meetup</strong> with the seller after placing your order.</>}
+                        : deliveryMethod === "zamorax_logistics"
+                          ? "Delivered door-to-door — no need to coordinate with the seller."
+                          : <>You can also arrange <strong>meetup</strong> with the seller after placing your order.</>}
                     </p>
                   </div>
+
+                  {/* Door delivery fee — only when FBZ or ZamoraxLogic is the
+                      SELECTED method. No pickup station shown: buyers only
+                      learn that location by phone once goods arrive in
+                      their state. */}
+                  {(deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics") && (
+                    <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">Door Delivery</span>
+                        <span className="text-xs font-semibold">
+                          {deliveryFeeKobo > 0 ? formatPrice(deliveryFeeKobo) : "Free"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Delivered to your address. We'll call you once it arrives in your state.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -665,7 +745,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                     )}
                     <div className="flex justify-between px-3 py-2">
                       <span className="text-muted-foreground text-xs">
-                        Delivery ({deliveryMethod === "fbz" ? "FBZ Express" : "meetup"})
+                        Delivery ({deliveryMethod === "fbz" ? "FBZ Express" : deliveryMethod === "zamorax_logistics" ? "ZamoraxLogic" : "meetup"})
                       </span>
                       <span className={`text-xs font-medium ${deliveryFeeKobo > 0 ? "" : "text-emerald-600"}`}>
                         {deliveryFeeKobo > 0 ? formatPrice(deliveryFeeKobo) : "Free"}
