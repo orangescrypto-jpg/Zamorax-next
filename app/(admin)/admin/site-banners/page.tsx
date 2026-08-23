@@ -27,6 +27,7 @@ interface SiteBanner {
   ctaLabel: string
   href: string
   imageUrl: string
+  mediaType: "image" | "video"
   bgColor: string
   textColor: string
   active: boolean
@@ -40,6 +41,7 @@ const EMPTY = (placement: "header" | "header_slider" | "footer"): Omit<SiteBanne
   ctaLabel: "",
   href: "",
   imageUrl: "",
+  mediaType: "image",
   bgColor: "#FF6B00",
   textColor: "#FFFFFF",
   active: true,
@@ -228,6 +230,26 @@ function BannerForm({
     setUploading(true)
     try {
       const raw = e.target.files[0]
+      const isVideo = raw.type.startsWith("video/")
+
+      if (isVideo) {
+        // Videos are uploaded as-is — no client-side re-encoding available,
+        // so just enforce a sane size cap so the homepage doesn't choke on
+        // a huge file.
+        if (raw.size > 25 * 1024 * 1024) {
+          toast({ title: "Video too large", description: "Please keep banner videos under 25MB.", variant: "destructive" })
+          setUploading(false)
+          e.target.value = ""
+          return
+        }
+        const ext  = raw.name.split(".").pop() || "mp4"
+        const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.${ext}`
+        const result = await StorageService.uploadFile(raw, path)
+        onChange({ ...banner, imageUrl: result.url, mediaType: "video" })
+        toast({ title: "Video uploaded ✅" })
+        return
+      }
+
       // GIFs must skip compression entirely — imageCompression() always
       // re-encodes to a static webp, which silently strips the animation.
       // Upload the original GIF bytes as-is so it stays animated.
@@ -246,7 +268,7 @@ function BannerForm({
       const ext  = isGif ? "gif" : "webp"
       const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.${ext}`
       const result = await StorageService.uploadFile(file, path)
-      set("imageUrl")(result.url)
+      onChange({ ...banner, imageUrl: result.url, mediaType: "image" })
       toast({ title: "Image uploaded ✅" })
     } catch (err: any) {
       toast({ title: "Upload failed", description: err?.message, variant: "destructive" })
@@ -263,18 +285,29 @@ function BannerForm({
           else in this form still gets saved, but is ignored while an image
           is attached — remove the image to go back to the text/color banner. ── */}
       <div className="space-y-1.5">
-        <Label>Banner image (optional)</Label>
+        <Label>Banner image or video (optional)</Label>
         <p className="text-xs text-muted-foreground">
           {placement === "header"
-            ? "Upload a pre-made wide strip image (recommended ~1500×120px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."
+            ? "Upload a pre-made wide strip image or video (recommended ~1500×120px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."
             : placement === "header_slider"
-              ? "Upload a pre-made wide slide image (recommended ~1600×500px). Add several active slides here and they'll auto-rotate with dots, like a Jumia-style homepage slider. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."
-              : "Upload a pre-made banner image (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs are supported and stay animated."}
+              ? "Upload a pre-made wide slide image or video (recommended ~1600×500px). Add several active slides here and they'll auto-rotate with dots, like a Jumia-style homepage slider. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically. Keep videos under 25MB."
+              : "Upload a pre-made banner image or video (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."}
         </p>
 
         {banner.imageUrl ? (
           <div className="relative rounded-lg border overflow-hidden">
-            <img src={banner.imageUrl} alt="Banner preview" className="w-full h-auto max-h-40 object-contain bg-muted" />
+            {banner.mediaType === "video" ? (
+              <video
+                src={banner.imageUrl}
+                className="w-full h-auto max-h-40 object-contain bg-muted"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img src={banner.imageUrl} alt="Banner preview" className="w-full h-auto max-h-40 object-contain bg-muted" />
+            )}
             <button
               type="button"
               onClick={() => {
@@ -282,11 +315,11 @@ function BannerForm({
                 // otherwise clicking X (whether swapping images or backing out
                 // of an unsaved draft) leaves the upload orphaned in R2.
                 const url = banner.imageUrl
-                set("imageUrl")("")
+                onChange({ ...banner, imageUrl: "", mediaType: "image" })
                 if (url) StorageService.deleteFile(url).catch(() => { /* orphaned file, not worth blocking on */ })
               }}
               className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-              aria-label="Remove image"
+              aria-label="Remove media"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -298,10 +331,10 @@ function BannerForm({
             ) : (
               <>
                 <Upload className="h-6 w-6 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Click to upload an image</span>
+                <span className="text-xs text-muted-foreground">Click to upload an image or video</span>
               </>
             )}
-            <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={handleImageUpload} />
+            <input type="file" accept="image/*,video/*" className="hidden" disabled={uploading} onChange={handleImageUpload} />
           </label>
         )}
       </div>
