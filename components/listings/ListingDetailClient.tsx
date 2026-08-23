@@ -1263,6 +1263,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             sellerName:    seller?.storeName || seller?.fullName,
             nigerianState: listing.nigerianState,
             estimatedDeliveryDays: listing.estimatedDeliveryDays,
+            isFBZ: listing.isFBZ,
           }}
           // An accepted offer is a negotiated total for offer.quantity units
           // (default 1) — same rule as Add to Cart above — so Buy Now
