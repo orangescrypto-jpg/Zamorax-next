@@ -33,6 +33,7 @@ function rowToListing(row: Record<string, unknown>) {
     verificationVideo:  row.verification_video      ? String(row.verification_video) : undefined,
     attributes:         parse(row.attributes)       ?? {},
     isHubVerified:      !!row.is_hub_verified,
+    isFBZ:              !!row.is_fbz,
     isActive:           true, // derived from status === 'active'
     isBoosted:          !!row.is_boosted,
     isZamoraxPick:      !!row.is_zamorax_pick,
