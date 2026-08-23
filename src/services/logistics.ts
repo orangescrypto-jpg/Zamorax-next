@@ -91,12 +91,27 @@ export const DEFAULT_ROUTE_OVERRIDES: Record<string, number> = {
   "Ibadan__Abuja":          280000,
 }
 
+// ─── Weight tiers ─────────────────────────────────────────────────
+// Admin-editable weight-based pricing bands, replacing the old flat
+// "threshold + per-kg surcharge" model. Each tier is a [minKg, maxKg) range
+// with a flat kobo price for any item whose weight falls in that range.
+// maxKg === null means "and above" (the last/open-ended tier).
+// Example admin config: 0–5kg → ₦0, 5–10kg → ₦1,500, 10kg+ → ₦3,000.
+export interface WeightTier {
+  minKg:      number
+  maxKg:      number | null   // null = open-ended ("and above")
+  priceKobo:  number
+}
+
+export const DEFAULT_WEIGHT_TIERS: WeightTier[] = [
+  { minKg: 0, maxKg: 5, priceKobo: 0 },
+]
+
 // ─── Pricing snapshot from Firestore ─────────────────────────────
 export interface LogisticsPricingSnapshot {
   zonePrices:          Record<string, number>  // kobo
   routeOverrides:      Record<string, number>  // kobo
-  weightThresholdKg:   number
-  weightPerKgKobo:     number
+  weightTiers:         WeightTier[]
   doorstepFeeKobo:     number
   fragileFeeKobo:      number
 }
@@ -104,8 +119,7 @@ export interface LogisticsPricingSnapshot {
 const PRICING_DEFAULTS: LogisticsPricingSnapshot = {
   zonePrices:        DEFAULT_ZONE_PRICES,
   routeOverrides:    DEFAULT_ROUTE_OVERRIDES,
-  weightThresholdKg: 2,
-  weightPerKgKobo:   100000,  // ₦1,000 per extra kg
+  weightTiers:       DEFAULT_WEIGHT_TIERS,
   doorstepFeeKobo:   50000,   // ₦500
   fragileFeeKobo:    30000,   // ₦300
 }
@@ -113,11 +127,27 @@ const PRICING_DEFAULTS: LogisticsPricingSnapshot = {
 // ─── Fee breakdown ────────────────────────────────────────────────
 export interface DeliveryFeeBreakdown {
   base:             number   // kobo — zone or override base rate
-  weightSurcharge:  number   // kobo — only if above threshold
+  weightSurcharge:  number   // kobo — the matched weight tier's price
   doorstepFee:      number   // kobo — if doorstep chosen
   fragileFee:       number   // kobo — if item fragile
   total:            number   // kobo — what buyer pays
   routeLabel:       string   // e.g. "Lagos → Abuja (override)" for UI
+}
+
+// Find the tier an item's weight falls into. Tiers are sorted by minKg
+// first so an out-of-order admin edit still resolves correctly. Falls back
+// to the last (highest) tier if the weight exceeds every closed range and
+// none is open-ended — better to charge the top rate than silently charge
+// nothing for an unexpectedly heavy item.
+function matchWeightTier(weightKg: number, tiers: WeightTier[]): number {
+  if (!tiers || tiers.length === 0) return 0
+  const sorted = [...tiers].sort((a, b) => a.minKg - b.minKg)
+  for (const tier of sorted) {
+    const withinMin = weightKg >= tier.minKg
+    const withinMax = tier.maxKg == null || weightKg < tier.maxKg
+    if (withinMin && withinMax) return tier.priceKobo
+  }
+  return sorted[sorted.length - 1].priceKobo
 }
 
 // ─── Service ──────────────────────────────────────────────────────
@@ -127,11 +157,26 @@ export const LogisticsService = {
     try {
       const doc = await AdminService.getDoc("config", "platform")
       if (!doc) return PRICING_DEFAULTS
+      // Back-compat: older saved settings may only have the flat
+      // threshold/per-kg fields (zlaWeightThreshold/zlaWeightPerKgKobo) and
+      // no zlaWeightTiers array yet — synthesize an equivalent 2-tier setup
+      // from those so pricing doesn't silently reset to defaults the first
+      // time this loads after the upgrade.
+      const savedTiers = (doc as any).zlaWeightTiers as WeightTier[] | undefined
+      const legacyThreshold = (doc as any).zlaWeightThreshold
+      const legacyPerKg     = (doc as any).zlaWeightPerKgKobo
+      const weightTiers = Array.isArray(savedTiers) && savedTiers.length > 0
+        ? savedTiers
+        : (legacyThreshold != null && legacyPerKg != null)
+          ? [
+              { minKg: 0, maxKg: legacyThreshold, priceKobo: 0 },
+              { minKg: legacyThreshold, maxKg: null, priceKobo: Math.round(legacyPerKg) },
+            ]
+          : DEFAULT_WEIGHT_TIERS
       return {
         zonePrices:        (doc as any).zlaZonePrices      ?? DEFAULT_ZONE_PRICES,
         routeOverrides:    (doc as any).zlaRouteOverrides   ?? DEFAULT_ROUTE_OVERRIDES,
-        weightThresholdKg: (doc as any).zlaWeightThreshold  ?? PRICING_DEFAULTS.weightThresholdKg,
-        weightPerKgKobo:   (doc as any).zlaWeightPerKgKobo  ?? PRICING_DEFAULTS.weightPerKgKobo,
+        weightTiers,
         doorstepFeeKobo:   (doc as any).zlaDoorstepFee      ?? PRICING_DEFAULTS.doorstepFeeKobo,
         fragileFeeKobo:    (doc as any).zlaFragileFee       ?? PRICING_DEFAULTS.fragileFeeKobo,
       }
@@ -171,9 +216,9 @@ export const LogisticsService = {
         : `${fromZone.replace("_", " ")} → ${toZone.replace("_", " ")} zone`
     }
 
-    // 3. Weight surcharge — only above threshold
-    const extraKg        = Math.max(0, weightKg - pricing.weightThresholdKg)
-    const weightSurcharge = extraKg > 0 ? Math.round(extraKg * pricing.weightPerKgKobo) : 0
+    // 3. Weight tier — admin-defined bands (e.g. 0–5kg free, 5–10kg ₦1,500,
+    // 10kg+ ₦3,000), replacing the old flat threshold + per-kg surcharge.
+    const weightSurcharge = matchWeightTier(weightKg, pricing.weightTiers)
 
     // 4. Other surcharges
     const doorstepFee = isDoorstep ? pricing.doorstepFeeKobo : 0
