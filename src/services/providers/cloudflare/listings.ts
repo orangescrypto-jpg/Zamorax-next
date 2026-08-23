@@ -222,6 +222,13 @@ export const ListingsService: IListingsService = {
     if (data.isBoosted    !== undefined)   patch.is_boosted   = data.isBoosted ? 1 : 0
     if (data.boostExpiresAt !== undefined) patch.boost_expires_at = data.boostExpiresAt
     if (data.status       !== undefined)   patch.status       = data.status
+    // Standing discount — plain permanent discount, settable on create OR
+    // edit (unlike flashDeal which only sets post-creation from the
+    // dashboard). Passing standingDiscount: null clears it.
+    if (data.standingDiscount !== undefined) {
+      patch.standing_discount_enabled = data.standingDiscount ? 1 : 0
+      patch.standing_discount_percent = data.standingDiscount?.discountPercent ?? null
+    }
     await AdminService.updateDoc("listings", id, patch)
   },
 
