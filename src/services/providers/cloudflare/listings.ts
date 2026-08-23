@@ -12,7 +12,7 @@ const PAGE_SIZE = 20
 const LISTING_CARD_COLS = `
   id, seller_id, category_id, category, slug, title, listing_type, condition,
   price, price_rent_day, price_rent_week, deposit_amount,
-  images, is_hub_verified, is_boosted, boost_type, boost_expires_at, status,
+  images, is_hub_verified, is_fbz, fulfilled_by, is_boosted, boost_type, boost_expires_at, status,
   nigerian_state, seller_state, city, delivery_nationwide,
   stock_qty, views, saves, inquiries, estimated_delivery_days,
   seller_name, seller_plan, seller_rating, seller_verified,
@@ -43,6 +43,7 @@ function mapRow(row: Record<string, unknown>): Listing {
     verificationVideo:   row.verification_video      ? String(row.verification_video)      : undefined,
     attributes:          parse(row.attributes)       ?? {},
     isHubVerified:       !!row.is_hub_verified,
+    isFBZ:               !!row.is_fbz,
     isActive:            row.status === "active",
     isBoosted:           !!row.is_boosted,
     boostType:           String(row.boost_type       ?? "none") as Listing["boostType"],
