@@ -30,12 +30,20 @@ interface Props {
   weightKg?:        number
   isFragile?:       boolean
   shippingMethods?: DeliveryMethod[]
+  // Whether this listing's stock is actually verified/held at a Zamorax
+  // warehouse (listing.isFBZ, set only by admin FBZ intake — see
+  // app/(admin)/admin/fbz/page.tsx handleActivate). This is the real
+  // source of truth for whether "FBZ Express" should be offered; it must
+  // NOT be derived from shippingMethods, which just reflects delivery
+  // methods the seller opted into and says nothing about where the stock
+  // physically sits.
+  isFBZ?: boolean
 }
 
 export function EscrowConfirmModal({
   orderId, open, onOpenChange, onConfirm,
   sellerState = "", weightKg = 0.5, isFragile = false,
-  shippingMethods,
+  shippingMethods, isFBZ = false,
 }: Props) {
   const { toast } = useToast()
 
@@ -51,8 +59,8 @@ export function EscrowConfirmModal({
   const [accepted, setAccepted] = useState(false)
   const [loading,  setLoading]  = useState(false)
 
-  // Derive isFBZ from shippingMethods (or default true if not specified)
-  const isFBZ = !shippingMethods || shippingMethods.includes("fbz")
+  // isFBZ now comes directly from the prop (the listing's real FBZ
+  // status) — no longer derived from shippingMethods.
 
   const handleDeliveryChange = (method: DeliveryMethod, meta: DeliveryMethodMeta) => {
     setDeliveryMethod(method)
