@@ -223,6 +223,16 @@ export function ListingCard({ listing }: { listing: Listing }) {
           </div>
         )}
 
+        {/* Free Delivery badge — admin-set per-listing delivery fee
+            override of 0. Same signal as the "Free Delivery" badge on the
+            listing detail page, so buyers see it before tapping in. */}
+        {listing.deliveryFeeOverrideKobo === 0 && (
+          <div className="flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-1">
+            <Truck className="h-3 w-3 shrink-0" />
+            <span>Free Delivery</span>
+          </div>
+        )}
+
         {/* Coupon badge — seller-set standing discount code, set at listing
             creation. Shows the code so buyers know to enter it at checkout. */}
         {listing.coupon?.code && (
