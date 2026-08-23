@@ -404,14 +404,14 @@ export default function AdminFBZPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Delivery methods offered</span>
                     <div className="flex gap-1 flex-wrap justify-end">
-                      {(intakeListing.shippingMethods ?? ["meetup"]).map((m: string) => (
+                      {(Array.isArray(intakeListing.shippingMethods) ? intakeListing.shippingMethods : intakeListing.shippingMethods ? [intakeListing.shippingMethods] : ["meetup"]).map((m: string) => (
                         <Badge key={m} variant="outline" className="text-[10px]">
                           {m === "meetup" ? "Meet Up" : m === "zamorax_logistics" ? "ZLA" : m === "fbz" ? "FBZ" : m}
                         </Badge>
                       ))}
                     </div>
                   </div>
-                  {!(intakeListing.shippingMethods ?? []).includes("fbz") && (
+                  {!(Array.isArray(intakeListing.shippingMethods) ? intakeListing.shippingMethods : intakeListing.shippingMethods ? [intakeListing.shippingMethods] : []).includes("fbz") && (
                     <p className="text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5 flex items-start gap-1.5">
                       <Truck className="h-3 w-3 mt-0.5 shrink-0" />
                       Seller hasn't selected "Fulfilled by Zamorax" as a delivery method on this listing — confirm with them before activating.
