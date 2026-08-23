@@ -108,12 +108,12 @@ export default function AdminFBZPage() {
         activatedAt: serverTimestamp(),
       })
 
-      // If content review already approved this listing (status was held at
-      // 'pending_fbz_stock' waiting on exactly this step), stock activation
-      // is the last gate — take it fully live now. If content review hasn't
-      // happened yet (still 'pending_fbz'), leave status alone; the normal
-      // approve action will take it to 'active' once content is reviewed,
-      // since stock will already be activated by then.
+      // If content review hasn't happened yet at all (listing is still
+      // 'pending_fbz', awaiting content approval), leave status untouched —
+      // the normal approve action will take it live once content is
+      // reviewed. If content review already approved this listing (status
+      // was held at 'pending_fbz_stock' waiting on exactly this step),
+      // stock activation is the last gate — take it fully live now.
       //
       // The FBZ badge itself (is_fbz) is only turned on for non-official
       // sellers — an official seller's listing already carries the
@@ -121,17 +121,29 @@ export default function AdminFBZPage() {
       // would be redundant. fulfilled_by still goes to "zamorax" either
       // way, since Zamorax genuinely holds and ships this stock regardless
       // of the seller's official status.
-      const listingUpdate: Record<string, unknown> = {
+      //
+      // Split into two updates: the FBZ metadata (isFBZ / fbzQuantity /
+      // fbzShipmentId / fulfilledBy) and the status flip. Previously these
+      // were one UPDATE — if any single column in it ever failed (as
+      // happened with the is_f_b_z bug), the whole statement rolled back
+      // and status silently never reached 'active', even though the toast
+      // said "FBZ Activated!". Splitting means a problem with one field
+      // can't block the other, and the status flip — the one thing that
+      // actually controls public visibility — always gets its own
+      // dedicated write and its own error surface.
+      const goingLive = intakeListing?.status === "pending_fbz_stock"
+      await AdminService.updateDoc("listings", intakeShipment.listingId, {
         isFBZ: intakeSellerOfficial === false,
         fbzQuantity: qty,
         fbzShipmentId: intakeShipment.id,
         fulfilledBy: "zamorax",
         updatedAt: serverTimestamp(),
+      })
+      if (goingLive) {
+        await AdminService.updateDoc("listings", intakeShipment.listingId, {
+          status: "active",
+        })
       }
-      if (intakeListing?.status === "pending_fbz_stock") {
-        listingUpdate.status = "active"
-      }
-      await AdminService.updateDoc("listings", intakeShipment.listingId, listingUpdate)
 
       // Notify seller
       await AdminService.addDoc("notifications", {
