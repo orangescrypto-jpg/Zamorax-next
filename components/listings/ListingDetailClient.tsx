@@ -620,7 +620,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                   <Zap className="h-3 w-3" /> Fulfilled by Zamorax
                 </Badge>
               )}
-              {listing.isFBZ && listing.deliveryFeeOverrideKobo === 0 && (
+              {listing.deliveryFeeOverrideKobo === 0 && (
                 <Badge className="bg-blue-100 text-blue-700 border-0 gap-1">
                   <Truck className="h-3 w-3" /> Free Delivery
                 </Badge>
