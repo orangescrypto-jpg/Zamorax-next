@@ -95,6 +95,8 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
   const [sellerZlaCoverage,  setSellerZlaCoverage]  = useState<Record<string, boolean>>({})
   const [sellerZlaFees,      setSellerZlaFees]      = useState<Record<string, number>>({})
   const [sellerFbzFees,      setSellerFbzFees]      = useState<Record<string, number>>({})
+  const [sellerZlaBreakdowns, setSellerZlaBreakdowns] = useState<Record<string, import("@/src/services/logistics").DeliveryFeeBreakdown>>({})
+  const [sellerFbzBreakdowns, setSellerFbzBreakdowns] = useState<Record<string, import("@/src/services/logistics").DeliveryFeeBreakdown>>({})
   // Buyer's doorstep-vs-pickup choice, per seller group. true = deliver to
   // buyer's address (adds the doorstep fee on top of the base zone/route
   // rate), false = buyer collects from a pickup station (base rate only).
@@ -135,6 +137,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
             const feeBreakdown = LogisticsService.calculateFee(sellerState, state, pricing, { weightKg: totalWeight, isFragile: hasFragile, isDoorstep: isDoorstepFor(sellerId) })
             const fee: number  = feeBreakdown.total
             setSellerZlaFees(prev => ({ ...prev, [sellerId]: fee }))
+            setSellerZlaBreakdowns(prev => ({ ...prev, [sellerId]: feeBreakdown }))
           }
         }
       } catch {
@@ -180,6 +183,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
         // state, never the seller's own state.
         const feeBreakdown = await LogisticsService.getFbzDeliveryFee(warehouse.state, state, { weightKg: totalWeight, isFragile: hasFragile, isDoorstep: isDoorstepFor(sellerId) })
         setSellerFbzFees(prev => ({ ...prev, [sellerId]: feeBreakdown.total }))
+        setSellerFbzBreakdowns(prev => ({ ...prev, [sellerId]: feeBreakdown }))
       } catch {
         // Leave fee unset — DeliveryOption below falls back to 0 rather
         // than silently blocking checkout on a pricing-fetch failure.
@@ -555,7 +559,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         {methods.includes("zamorax_logistics") && !coverLoading && (
                           zlaCovered ? (
                             <DeliveryOption
-                              label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Zamorax Logistics — Free Delivery" : "Zamorax Logistics"}
+                              label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Zamorax Logistics: Free Delivery" : "Zamorax Logistics"}
                               desc="Door-to-door delivery via ZLA agents"
                               fee={zlaFee}
                               selected={selected?.method === "zamorax_logistics"}
@@ -567,8 +571,8 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         )}
                         {allItemsFBZ && settings.fbzEnabled && (settings.fbzCoveredStates?.length ?? 0) > 0 && (
                           <DeliveryOption
-                            label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Fulfilled by Zamorax — Free Delivery" : "Fulfilled by Zamorax"}
-                            desc="Handled from our warehouse — ships nationwide"
+                            label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Fulfilled by Zamorax: Free Delivery" : "Fulfilled by Zamorax"}
+                            desc="Handled from our warehouse, ships nationwide"
                             fee={sellerFbzFees[sellerId] ?? 0}
                             selected={selected?.method === "fbz"}
                             onSelect={() => setDeliverySelections(prev => ({ ...prev, [sellerId]: { method: "fbz", fee: sellerFbzFees[sellerId] ?? 0 } }))}
@@ -581,7 +585,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                             silently falling back to meetup with no explanation. */}
                         {!allItemsFBZ && methods.includes("fbz") && (
                           <p className="text-[10px] text-muted-foreground italic px-1">
-                            Seller selected FBZ Express for this item, but the stock hasn't been confirmed at a Zamorax warehouse yet — only the methods below are available for now.
+                            Seller selected FBZ Express for this item, but the stock hasn't been confirmed at a Zamorax warehouse yet. Only the methods below are available for now.
                           </p>
                         )}
                       </div>
@@ -617,7 +621,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                               }`}
                             >
                               <p className="text-xs font-semibold">Pickup Station</p>
-                              <p className="text-[10px] text-muted-foreground">Cheaper — collect it yourself</p>
+                              <p className="text-[10px] text-muted-foreground">Cheaper. Collect it yourself</p>
                             </button>
                           </div>
                         </div>
@@ -627,7 +631,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                           choice above (or the group's flat override, when
                           every item has one). SELECTED method only. */}
                       {(selected?.method === "zamorax_logistics" || selected?.method === "fbz") && (
-                        <div className="rounded-lg border border-border bg-background p-2.5 space-y-1">
+                        <div className="rounded-lg border border-border bg-background p-2.5 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-foreground">
                               {items.every(i => i.deliveryFeeOverrideKobo != null)
@@ -638,10 +642,49 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                               {selected.fee > 0 ? formatPrice(selected.fee) : "Free"}
                             </span>
                           </div>
+
+                          {/* Line-item breakdown — only for live-computed
+                              fees (a per-item override is a flat price
+                              with nothing to break down). Base route/zone
+                              rate, weight surcharge (seller-set group
+                              weight against admin's tiers), and doorstep
+                              fee only if chosen. */}
+                          {!items.every(i => i.deliveryFeeOverrideKobo != null) && (() => {
+                            const bd = selected.method === "fbz"
+                              ? sellerFbzBreakdowns[sellerId]
+                              : sellerZlaBreakdowns[sellerId]
+                            if (!bd) return null
+                            const totalWeight = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
+                            return (
+                              <div className="pt-1.5 border-t border-border/60 space-y-1">
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Base fee ({bd.routeLabel})</span>
+                                  <span>{bd.base > 0 ? formatPrice(bd.base) : "Free"}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                  <span>Weight fee ({totalWeight}kg)</span>
+                                  <span>{bd.weightSurcharge > 0 ? formatPrice(bd.weightSurcharge) : "Free"}</span>
+                                </div>
+                                {isDoorstepFor(sellerId) && (
+                                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                    <span>Doorstep fee</span>
+                                    <span>{bd.doorstepFee > 0 ? formatPrice(bd.doorstepFee) : "Free"}</span>
+                                  </div>
+                                )}
+                                {bd.fragileFee > 0 && (
+                                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                    <span>Fragile handling fee</span>
+                                    <span>{formatPrice(bd.fragileFee)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+
                           <p className="text-[10px] text-muted-foreground">
                             {items.every(i => i.deliveryFeeOverrideKobo != null) || isDoorstepFor(sellerId)
                               ? "Delivered to your address. We'll call you once it arrives in your state."
-                              : "Collect from the nearest pickup station in your state once it arrives — we'll call you."}
+                              : "Collect from the nearest pickup station in your state once it arrives. We'll call you."}
                           </p>
                         </div>
                       )}
@@ -750,7 +793,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                   />
                 ) : (
                   <div className="p-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 text-xs text-muted-foreground space-y-0.5">
-                    <p className="font-semibold text-foreground">Payment via {selectedMethod?.label ?? "—"}</p>
+                    <p className="font-semibold text-foreground">Payment via {selectedMethod?.label ?? "-"}</p>
                     <p>{selectedMethod?.desc}</p>
                   </div>
                 )}
