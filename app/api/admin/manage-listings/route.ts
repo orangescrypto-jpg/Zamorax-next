@@ -189,23 +189,25 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       // Sets the listing's default fulfillment owner. New orders for this
       // listing inherit this value (see createOrder in
       // src/services/providers/cloudflare/orders.ts). Restricted to
-      // official listings — either admin-picked (is_zamorax_pick) or the
-      // seller account itself is official (users.is_official) — same rule
-      // as marking an individual order shipped (see
+      // listings Zamorax actually fulfills — admin-picked (is_zamorax_pick),
+      // official-seller (users.is_official), or FBZ-activated (is_fbz,
+      // regardless of seller status — a non-official seller can still send
+      // individual listings to FBZ while fulfilling others themselves via
+      // meetup) — same rule as marking an individual order shipped (see
       // app/api/admin/orders/[id]/ship). This does not touch any existing
       // order, and never affects payout — seller_payout / escrow release
       // are untouched either way.
       const listingRow = await d1Query(
-        `SELECT listings.is_zamorax_pick, users.is_official AS seller_is_official
+        `SELECT listings.is_zamorax_pick, listings.is_fbz, users.is_official AS seller_is_official
          FROM listings LEFT JOIN users ON users.uid = listings.seller_id
          WHERE listings.id = ?`,
         [id], nativeDB,
       )
       const listing = (listingRow as any)?.results?.[0]
-      const isOfficial = !!listing?.is_zamorax_pick || !!listing?.seller_is_official
-      if (!isOfficial) {
+      const isZamoraxFulfilled = !!listing?.is_zamorax_pick || !!listing?.seller_is_official || !!listing?.is_fbz
+      if (!isZamoraxFulfilled) {
         return NextResponse.json(
-          { error: "Fulfillment can only be set on official listings or official-seller listings." },
+          { error: "Fulfillment can only be set on official listings, official-seller listings, or FBZ-activated listings." },
           { status: 403 },
         )
       }
