@@ -31,15 +31,18 @@ function rowToListing(row: Record<string, unknown>) {
     verificationVideo:  row.verification_video      ? String(row.verification_video) : undefined,
     attributes:         parse(row.attributes)       ?? {},
     isHubVerified:      !!row.is_hub_verified,
+    isFBZ:              !!row.is_fbz,
     isActive:           row.status === "active",
     isBoosted:          !!row.is_boosted,
     isZamoraxPick:      !!row.is_zamorax_pick,
-    // Live fulfillment source of truth for this listing — 'zamorax' if
-    // either the seller account is official OR this specific listing was
-    // admin-picked. Used by SellerOrderCard to disable "Mark Shipped" on
-    // ANY order (regardless of when it was created) when the listing is
-    // currently FBZ, not just orders that were stamped at creation time.
-    fulfilledBy:        (row.is_official_seller || row.is_zamorax_pick) ? "zamorax" : "seller",
+    // Live fulfillment source of truth for this listing — 'zamorax' if the
+    // FBZ intake flow activated this listing (row.fulfilled_by, set by
+    // admin/fbz on intake) OR the seller account/listing is official.
+    // Used by SellerOrderCard to disable "Mark Shipped" on ANY order
+    // (regardless of when it was created) when the listing is currently
+    // FBZ or official, not just orders that were stamped at creation time.
+    fulfilledBy:        row.fulfilled_by === "zamorax" || row.is_official_seller || row.is_zamorax_pick
+                           ? "zamorax" : "seller",
     isOfficial:         !!row.is_official_seller || !!row.is_zamorax_pick,
     boostType:          String(row.boost_type       ?? "none"),
     boostExpiresAt:     row.boost_expires_at        ? String(row.boost_expires_at) : undefined,
