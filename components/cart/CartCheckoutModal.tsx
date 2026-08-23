@@ -113,12 +113,22 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
         setSellerZlaCoverage(prev => ({ ...prev, [sellerId]: coverage.bothCovered }))
 
         if (coverage.bothCovered) {
-          const totalWeight  = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
-          const hasFragile   = items.some(i => i.isFragile)
-          const pricing      = await LogisticsService.getPricing()
-          const feeBreakdown = LogisticsService.calculateFee(sellerState, state, pricing, { weightKg: totalWeight, isFragile: hasFragile })
-          const fee: number  = feeBreakdown.total
-          setSellerZlaFees(prev => ({ ...prev, [sellerId]: fee }))
+          // Same override rule as FBZ below: if every item in this group
+          // carries a manual delivery_fee_override_kobo (e.g. 0 for free
+          // delivery, set by admin on FBZ / Zamorax Direct / official-seller
+          // listings), sum those instead of live zone pricing — the
+          // override wins outright regardless of delivery method chosen.
+          if (items.every(i => i.deliveryFeeOverrideKobo != null)) {
+            const total = items.reduce((sum, i) => sum + (i.deliveryFeeOverrideKobo ?? 0), 0)
+            setSellerZlaFees(prev => ({ ...prev, [sellerId]: total }))
+          } else {
+            const totalWeight  = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
+            const hasFragile   = items.some(i => i.isFragile)
+            const pricing      = await LogisticsService.getPricing()
+            const feeBreakdown = LogisticsService.calculateFee(sellerState, state, pricing, { weightKg: totalWeight, isFragile: hasFragile })
+            const fee: number  = feeBreakdown.total
+            setSellerZlaFees(prev => ({ ...prev, [sellerId]: fee }))
+          }
         }
       } catch {
         setSellerZlaCoverage(prev => ({ ...prev, [sellerId]: false }))
@@ -503,7 +513,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         {methods.includes("zamorax_logistics") && !coverLoading && (
                           zlaCovered ? (
                             <DeliveryOption
-                              label="Zamorax Logistics"
+                              label={items.every(i => i.deliveryFeeOverrideKobo === 0) ? "Zamorax Logistics — Free Delivery" : "Zamorax Logistics"}
                               desc="Door-to-door delivery via ZLA agents"
                               fee={zlaFee}
                               selected={selected?.method === "zamorax_logistics"}
