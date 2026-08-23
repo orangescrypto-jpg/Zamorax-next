@@ -523,6 +523,24 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                           />
                         )}
                       </div>
+
+                      {/* Door delivery fee/timing — only when ZamoraxLogic or FBZ
+                          is the SELECTED method (not just offered). No pickup
+                          station shown: buyers only learn that location by
+                          phone once goods arrive in their state. */}
+                      {(selected?.method === "zamorax_logistics" || selected?.method === "fbz") && (
+                        <div className="rounded-lg border border-border bg-background p-2.5 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-foreground">Door Delivery</span>
+                            <span className="text-xs font-semibold">
+                              {selected.fee > 0 ? formatPrice(selected.fee) : "Free"}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">
+                            Delivered to your address. We'll call you once it arrives in your state.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
