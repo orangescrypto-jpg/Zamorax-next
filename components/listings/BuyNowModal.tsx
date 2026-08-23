@@ -91,7 +91,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   const { settings } = usePlatformSettings()
   const { fees }     = useFeeSettings()
 
-  const [step,    setStep]    = useState<"address" | "review" | "payment" | "bank_details">("address")
+  const [step,    setStep]    = useState<"address" | "delivery" | "review" | "payment" | "bank_details">("address")
   const [loading, setLoading] = useState(false)
 
   // Which methods the admin has enabled (manual / card / bank-online).
@@ -225,9 +225,11 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
         const active = fbzWarehouses.filter(w => w.isActive)
         if (!active.length) return
         const warehouse = active.find(w => w.state === state) ?? active[0]
-        const pricing = await LogisticsService.getPricing()
-        const feeBreakdown = LogisticsService.calculateFee(
-          warehouse.state, state, pricing,
+        // FBZ now uses its own independent rate table (getFbzDeliveryFee),
+        // not ZLA's — priced from the WAREHOUSE's state to the buyer's
+        // state, never the seller's own state.
+        const feeBreakdown = await LogisticsService.getFbzDeliveryFee(
+          warehouse.state, state,
           { weightKg: listing.weightKg, isFragile: listing.isFragile },
         )
         if (!cancelled) setFbzFee(feeBreakdown.total)
@@ -498,7 +500,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
     onClose()
   }
 
-  const STEPS = ["address", "review", "payment", "bank_details"] as const
+  const STEPS = ["address", "delivery", "review", "payment"] as const
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -519,11 +521,15 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   ${step === s ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
                   {i + 1}
                 </span>
-                {i < 2 && <span className="text-muted-foreground/40 text-xs">›</span>}
+                {i < STEPS.length - 1 && <span className="text-muted-foreground/40 text-xs">›</span>}
               </div>
             ))}
             <span className="text-xs text-muted-foreground ml-1 capitalize">
-              {step === "address" ? "Delivery" : step === "review" ? "Review" : step === "payment" ? "Payment" : "Bank Transfer"}
+              {step === "address" ? "Address"
+                : step === "delivery" ? "Delivery"
+                : step === "review" ? "Review"
+                : step === "payment" ? "Payment"
+                : "Bank Transfer"}
             </span>
           </div>
         </DialogHeader>
@@ -633,9 +639,18 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       ))}
                     </select>
                   </div>
+                </div>
+              )}
+
+              {/* Step 2 — Delivery method (its own step, not shown until
+                  address is entered). Fee display never appears at step 1. */}
+              {step === "delivery" && (
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wide">
+                    <Truck className="h-3 w-3" /> Delivery Method
+                  </p>
                   {(fbzAvailable || (zlaOffered && zlaAvailable)) && !listingDefaultsToFbz && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Delivery method</Label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -758,7 +773,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                 </div>
               )}
 
-              {/* Step 2 — Review */}
+              {/* Step 3 — Review */}
               {step === "review" && (
                 <div className="space-y-3">
                   <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wide">
@@ -813,7 +828,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                 </div>
               )}
 
-              {/* Step 3 — Payment */}
+              {/* Step 4 — Payment */}
               {step === "payment" && (
                 <div className="space-y-3">
                   <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wide">
@@ -879,7 +894,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   )}
                 </div>
               )}
-              {/* Step 4 — Bank Details (manual payment only) */}
+              {/* Step 5 — Bank Details (manual payment only) */}
               {step === "bank_details" && pendingRef && (
                 <ManualPaymentInstructions
                   amount={buyerTotalWithDeliveryKobo}
@@ -905,15 +920,29 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   disabled={!addressValid}
                   onClick={() => {
                     saveLastAddress({ street: street.trim(), city: city.trim(), state, lga: lga.trim() })
-                    setStep("review")
+                    setStep("delivery")
                   }}
                 >
-                  Continue to Review
+                  Continue to Delivery
                 </Button>
+              )}
+              {step === "delivery" && (
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-none px-5 h-10" onClick={() => setStep("address")}>
+                    ‹ Back
+                  </Button>
+                  <Button
+                    className="flex-1 h-10 bg-primary text-white"
+                    disabled={!fbzAvailable && listingDefaultsToFbz}
+                    onClick={() => setStep("review")}
+                  >
+                    Continue to Review
+                  </Button>
+                </div>
               )}
               {step === "review" && (
                 <div className="flex gap-2">
-                  <Button variant="outline" className="flex-none px-5 h-10" onClick={() => setStep("address")}>
+                  <Button variant="outline" className="flex-none px-5 h-10" onClick={() => setStep("delivery")}>
                     ‹ Back
                   </Button>
                   <Button className="flex-1 h-10 bg-primary text-white" onClick={() => setStep("payment")}>
