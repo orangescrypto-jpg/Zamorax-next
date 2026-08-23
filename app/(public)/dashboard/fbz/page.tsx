@@ -67,12 +67,19 @@ export default function SellerFBZPage() {
     return unsub
   }, [])
 
-  // Load seller's active listings not yet in FBZ
+  // Load seller's active listings not yet in FBZ. isFBZ is NULL for any
+  // listing created before the is_fbz column existed (or simply never
+  // touched by FBZ), and SQL's "!= true" silently excludes NULL rows
+  // instead of matching them — which made every pre-existing active
+  // listing invisible here even though none of them are FBZ yet. Filter
+  // client-side on the "not truthy" listings instead of relying on the
+  // DB-level "!=" to catch NULL.
   useEffect(() => {
     if (!user?.uid) return
-    const q = AdminService._ref_("listings", [where("sellerId", "==", user.uid), where("status", "==", "active"), where("isFBZ", "!=", true)])
+    const q = AdminService._ref_("listings", [where("sellerId", "==", user.uid), where("status", "==", "active")])
     const unsub = onSnapshot(q, docs => {
-      setListings(docs.docs.map((d: any) => ({ id: d.id, ...d.data() })))
+      const all = docs.docs.map((d: any) => ({ id: d.id, ...d.data() }))
+      setListings(all.filter((l: any) => !l.isFBZ))
     })
     return unsub
   }, [user?.uid])
