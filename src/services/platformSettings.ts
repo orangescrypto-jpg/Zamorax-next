@@ -225,6 +225,7 @@ export interface PlatformSettings {
   badgeTrustedBuyerOrders: number
   badgePowerBuyerOrders: number
   // FBZ extended
+  fbzEnabled: boolean
   fbzStorageFeePerDayKobo: number
   fbzFulfillmentFeeKobo: number
   fbzWarehouseCapacity: number
@@ -480,6 +481,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   badgeVerifiedBuyerOrders: 5,
   badgeTrustedBuyerOrders: 20,
   badgePowerBuyerOrders: 50,
+  fbzEnabled: true,
   fbzStorageFeePerDayKobo: 500,
   fbzFulfillmentFeeKobo: 1500,
   fbzWarehouseCapacity: 10000,
