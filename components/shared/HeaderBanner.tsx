@@ -22,6 +22,7 @@ interface SiteBanner {
   ctaLabel?: string
   href?: string
   imageUrl?: string
+  mediaType?: "image" | "video"
   bgColor?: string
   textColor?: string
   active: boolean
@@ -68,7 +69,11 @@ export function HeaderBanner() {
   if (banner.imageUrl) {
     const imageContent = (
       <div className="w-full relative">
-        <img src={banner.imageUrl} alt={banner.title || ""} className="w-full h-auto block" />
+        {banner.mediaType === "video" ? (
+          <video src={banner.imageUrl} className="w-full h-auto block" autoPlay muted loop playsInline />
+        ) : (
+          <img src={banner.imageUrl} alt={banner.title || ""} className="w-full h-auto block" />
+        )}
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDismissed(true) }}
           className="absolute top-1/2 -translate-y-1/2 right-3 p-1 rounded-full bg-black/40 hover:bg-black/60 transition-colors"
