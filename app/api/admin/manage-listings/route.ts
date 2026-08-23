@@ -235,6 +235,31 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
          WHERE id = ?`,
         [fulfilledBy, auth.uid, now, now, id], nativeDB,
       )
+    } else if (action === "set_fbz_free_delivery" || action === "unset_fbz_free_delivery") {
+      // delivery_fee_override_kobo = 0 means "buyer sees free delivery
+      // regardless of state/weight" (see LogisticsService.calculateFee
+      // callers in BuyNowModal/CartCheckoutModal). Restricted to the same
+      // Zamorax-fulfilled set as set_fulfilled_by_* above — a listing
+      // Zamorax doesn't actually fulfill has no delivery fee to override.
+      const listingRow = await d1Query(
+        `SELECT listings.is_zamorax_pick, listings.is_fbz, users.is_official AS seller_is_official
+         FROM listings LEFT JOIN users ON users.uid = listings.seller_id
+         WHERE listings.id = ?`,
+        [id], nativeDB,
+      )
+      const listing = (listingRow as any)?.results?.[0]
+      const isZamoraxFulfilled = !!listing?.is_zamorax_pick || !!listing?.seller_is_official || !!listing?.is_fbz
+      if (!isZamoraxFulfilled) {
+        return NextResponse.json(
+          { error: "Free delivery can only be set on official listings, official-seller listings, or FBZ-activated listings." },
+          { status: 403 },
+        )
+      }
+      const overrideValue = action === "set_fbz_free_delivery" ? 0 : null
+      await d1Query(
+        "UPDATE listings SET delivery_fee_override_kobo = ?, updated_at = ? WHERE id = ?",
+        [overrideValue, now, id], nativeDB,
+      )
     }
 
     return NextResponse.json({ ok: true })
