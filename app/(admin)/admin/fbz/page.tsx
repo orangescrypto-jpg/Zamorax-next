@@ -50,6 +50,7 @@ export default function AdminFBZPage() {
   // not just the seller-claimed quantity from the shipment row.
   const [intakeListing, setIntakeListing] = useState<any>(null)
   const [intakeListingLoading, setIntakeListingLoading] = useState(false)
+  const [intakeSellerOfficial, setIntakeSellerOfficial] = useState<boolean | null>(null)
 
   // Reject dialog
   const [rejectOpen, setRejectOpen] = useState(false)
@@ -107,15 +108,30 @@ export default function AdminFBZPage() {
         activatedAt: serverTimestamp(),
       })
 
-      // Update listing — add FBZ flag and hand fulfillment to Zamorax,
-      // since the stock now physically lives in the warehouse
-      await AdminService.updateDoc("listings", intakeShipment.listingId, {
-        isFBZ: true,
+      // If content review already approved this listing (status was held at
+      // 'pending_fbz_stock' waiting on exactly this step), stock activation
+      // is the last gate — take it fully live now. If content review hasn't
+      // happened yet (still 'pending_fbz'), leave status alone; the normal
+      // approve action will take it to 'active' once content is reviewed,
+      // since stock will already be activated by then.
+      //
+      // The FBZ badge itself (is_fbz) is only turned on for non-official
+      // sellers — an official seller's listing already carries the
+      // Zamorax Direct badge, so a second "Fulfilled by Zamorax" badge
+      // would be redundant. fulfilled_by still goes to "zamorax" either
+      // way, since Zamorax genuinely holds and ships this stock regardless
+      // of the seller's official status.
+      const listingUpdate: Record<string, unknown> = {
+        isFBZ: intakeSellerOfficial === false,
         fbzQuantity: qty,
         fbzShipmentId: intakeShipment.id,
         fulfilledBy: "zamorax",
         updatedAt: serverTimestamp(),
-      })
+      }
+      if (intakeListing?.status === "pending_fbz_stock") {
+        listingUpdate.status = "active"
+      }
+      await AdminService.updateDoc("listings", intakeShipment.listingId, listingUpdate)
 
       // Notify seller
       await AdminService.addDoc("notifications", {
@@ -136,6 +152,29 @@ export default function AdminFBZPage() {
       setIntakeShipment(null)
     } catch (e) {
       toast({ title: "Error activating FBZ", variant: "destructive" })
+    }
+    setProcessing(null)
+  }
+
+  // Quick FBZ-badge toggle — for a non-official seller, admin doesn't need
+  // the full inspect/count/activate flow; just flip is_fbz + fulfilled_by
+  // straight on the listing. (An official seller's listings are already
+  // Zamorax-fulfilled by virtue of being official, so this toggle is only
+  // meaningful for non-official sellers who still want the FBZ badge shown.)
+  const handleToggleBadge = async (shipment: ZamoraxShipment, listing: any) => {
+    setProcessing(shipment.id)
+    try {
+      const turningOn = !listing?.isFBZ
+      await AdminService.updateDoc("listings", shipment.listingId, {
+        isFBZ: turningOn,
+        fbzShipmentId: turningOn ? shipment.id : null,
+        fulfilledBy: turningOn ? "zamorax" : "seller",
+        updatedAt: serverTimestamp(),
+      })
+      toast({ title: turningOn ? "FBZ badge enabled" : "FBZ badge removed", variant: "success" })
+      setIntakeListing((prev: any) => prev ? { ...prev, isFBZ: turningOn } : prev)
+    } catch {
+      toast({ title: "Error toggling FBZ badge", variant: "destructive" })
     }
     setProcessing(null)
   }
@@ -273,8 +312,15 @@ export default function AdminFBZPage() {
                     setIntakeOpen(true)
                     setIntakeListing(null)
                     setIntakeListingLoading(true)
+                    setIntakeSellerOfficial(null)
                     AdminService.getDoc("listings", s.listingId)
-                      .then(setIntakeListing)
+                      .then(listing => {
+                        setIntakeListing(listing)
+                        if (listing?.sellerId) {
+                          AdminService.getDoc("users", listing.sellerId)
+                            .then((u: any) => setIntakeSellerOfficial(!!u?.isOfficial))
+                        }
+                      })
                       .finally(() => setIntakeListingLoading(false))
                   }}
                 >
@@ -371,9 +417,14 @@ export default function AdminFBZPage() {
                       Seller hasn't selected "Fulfilled by Zamorax" as a delivery method on this listing — confirm with them before activating.
                     </p>
                   )}
-                  {intakeListing.status !== "active" && (
+                  {intakeListing.status !== "active" && intakeListing.status !== "pending_fbz_stock" && intakeListing.status !== "pending_fbz" && (
                     <p className="text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1.5">
                       This listing is not active ({intakeListing.status ?? "unknown"}) — it won't be visible to buyers even after FBZ activation.
+                    </p>
+                  )}
+                  {intakeListing.status === "pending_fbz" && (
+                    <p className="text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1.5">
+                      Content review hasn't approved this listing yet — it'll go live once you approve it from Listings, since stock will already be activated by then.
                     </p>
                   )}
                 </div>
@@ -408,6 +459,27 @@ export default function AdminFBZPage() {
                   rows={2}
                 />
               </div>
+            </div>
+          )}
+          {intakeSellerOfficial === false && intakeShipment && (
+            <div className="rounded-lg border border-dashed p-3 text-xs space-y-2">
+              <p className="text-muted-foreground">
+                This seller isn't an official account. If the goods are already confirmed
+                available, you can just toggle the FBZ badge instead of the full inspect &amp;
+                activate flow below.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => handleToggleBadge(intakeShipment, intakeListing)}
+                disabled={processing === intakeShipment?.id}
+              >
+                {processing === intakeShipment?.id
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <><Zap className="h-3.5 w-3.5 mr-1.5" /> {intakeListing?.isFBZ ? "Remove FBZ badge" : "Just toggle FBZ badge on"}</>
+                }
+              </Button>
             </div>
           )}
           <DialogFooter className="gap-2">
