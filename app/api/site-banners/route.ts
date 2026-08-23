@@ -21,9 +21,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
   try {
     const sql = placement
-      ? `SELECT id, placement, title, subtitle, cta_label, href, image_url, bg_color, text_color, active, "order"
+      ? `SELECT id, placement, title, subtitle, cta_label, href, image_url, media_type, bg_color, text_color, active, "order"
          FROM site_banners WHERE active = 1 AND placement = ? ORDER BY "order" ASC`
-      : `SELECT id, placement, title, subtitle, cta_label, href, image_url, bg_color, text_color, active, "order"
+      : `SELECT id, placement, title, subtitle, cta_label, href, image_url, media_type, bg_color, text_color, active, "order"
          FROM site_banners WHERE active = 1 ORDER BY "order" ASC`
     const result = await d1Query(sql, placement ? [placement] : [], nativeDB)
     const rows = (result as any)?.results ?? []
@@ -36,6 +36,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       ctaLabel:   r.cta_label,
       href:       r.href,
       imageUrl:   r.image_url,
+      mediaType:  r.media_type || "image",
       bgColor:    r.bg_color,
       textColor:  r.text_color,
       active:     !!r.active,
