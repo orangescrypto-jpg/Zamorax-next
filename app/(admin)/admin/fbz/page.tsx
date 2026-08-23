@@ -108,12 +108,15 @@ export default function AdminFBZPage() {
         activatedAt: serverTimestamp(),
       })
 
-      // If content review hasn't happened yet at all (listing is still
-      // 'pending_fbz', awaiting content approval), leave status untouched —
-      // the normal approve action will take it live once content is
-      // reviewed. If content review already approved this listing (status
-      // was held at 'pending_fbz_stock' waiting on exactly this step),
-      // stock activation is the last gate — take it fully live now.
+      // Previously this only flipped status to 'active' when content review
+      // had already separately approved the listing (status held at
+      // 'pending_fbz_stock') — an admin still stuck at 'pending_fbz' had to
+      // make a second trip to /admin/listings and hit Approve there before
+      // this activation would actually take effect, even though physically
+      // inspecting and confirming the stock here is itself a legitimate
+      // final checkpoint. Activating FBZ stock now always takes the listing
+      // live in one action — there's no longer a separate approval step to
+      // remember for FBZ listings specifically.
       //
       // The FBZ badge itself (is_fbz) is only turned on for non-official
       // sellers — an official seller's listing already carries the
@@ -131,7 +134,7 @@ export default function AdminFBZPage() {
       // can't block the other, and the status flip — the one thing that
       // actually controls public visibility — always gets its own
       // dedicated write and its own error surface.
-      const goingLive = intakeListing?.status === "pending_fbz_stock"
+      const goingLive = intakeListing?.status !== "active" && intakeListing?.status !== "rejected"
       await AdminService.updateDoc("listings", intakeShipment.listingId, {
         isFBZ: intakeSellerOfficial === false,
         fbzQuantity: qty,
@@ -430,9 +433,10 @@ export default function AdminFBZPage() {
                       Seller hasn't selected "Fulfilled by Zamorax" as a delivery method on this listing — confirm with them before activating.
                     </p>
                   )}
-                  {intakeListing.status !== "active" && intakeListing.status !== "pending_fbz_stock" && intakeListing.status !== "pending_fbz" && (
+                  {intakeListing.status === "rejected" && (
                     <p className="text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1.5">
-                      This listing is not active ({intakeListing.status ?? "unknown"}) — it won't be visible to buyers even after FBZ activation.
+                      This listing was rejected during content review — activating FBZ stock here
+                      won't make it live. Reverse the rejection on the Listings page first.
                     </p>
                   )}
                   {intakeListing.status === "pending_fbz" && (
@@ -500,7 +504,7 @@ export default function AdminFBZPage() {
             <Button
               className="bg-gradient-to-r from-primary to-emerald-500 text-white"
               onClick={handleActivate}
-              disabled={processing === intakeShipment?.id}
+              disabled={processing === intakeShipment?.id || intakeListing?.status === "rejected"}
             >
               {processing === intakeShipment?.id
                 ? <Loader2 className="h-4 w-4 animate-spin" />
