@@ -18,6 +18,7 @@ interface SiteBanner {
   ctaLabel?: string
   href?: string
   imageUrl?: string
+  mediaType?: "image" | "video"
   bgColor?: string
   textColor?: string
   active: boolean
@@ -92,11 +93,22 @@ export function HeaderBannerSlider() {
           const text = banner.textColor || "#FFFFFF"
 
           const slideInner = banner.imageUrl ? (
-            <img
-              src={banner.imageUrl}
-              alt={banner.title || ""}
-              className="w-full h-auto block"
-            />
+            banner.mediaType === "video" ? (
+              <video
+                src={banner.imageUrl}
+                className="w-full h-auto block"
+                autoPlay
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <img
+                src={banner.imageUrl}
+                alt={banner.title || ""}
+                className="w-full h-auto block"
+              />
+            )
           ) : (
             <div
               className="w-full flex flex-col items-center justify-center gap-2 px-6 py-10 sm:py-14 text-center"
