@@ -99,9 +99,16 @@ export default function AdminSiteBannersPage() {
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, imageUrl?: string) {
     if (!confirm("Delete this banner?")) return
     await AdminService.deleteDoc("siteBanners", id)
+    // Also remove the uploaded image from storage, not just the DB row —
+    // otherwise the file sits orphaned in R2 forever with nothing pointing
+    // to it. Non-fatal if this fails (e.g. banner had no image, or it was
+    // already removed) — the banner itself is already gone either way.
+    if (imageUrl) {
+      try { await StorageService.deleteFile(imageUrl) } catch { /* orphaned file, not worth blocking on */ }
+    }
     toast({ title: "Banner deleted" })
   }
 
@@ -191,7 +198,7 @@ export default function AdminSiteBannersPage() {
                 isLast={idx === filtered.length - 1}
                 saving={saving === banner.id}
                 onSave={(fields) => handleUpdate(banner.id, fields)}
-                onDelete={() => handleDelete(banner.id)}
+                onDelete={() => handleDelete(banner.id, banner.imageUrl)}
                 onMove={(dir) => handleMove(banner.id, dir)}
                 onToggle={(active) => handleUpdate(banner.id, { active })}
               />
@@ -270,7 +277,14 @@ function BannerForm({
             <img src={banner.imageUrl} alt="Banner preview" className="w-full h-auto max-h-40 object-contain bg-muted" />
             <button
               type="button"
-              onClick={() => set("imageUrl")("")}
+              onClick={() => {
+                // Remove the file from storage too, not just the form field —
+                // otherwise clicking X (whether swapping images or backing out
+                // of an unsaved draft) leaves the upload orphaned in R2.
+                const url = banner.imageUrl
+                set("imageUrl")("")
+                if (url) StorageService.deleteFile(url).catch(() => { /* orphaned file, not worth blocking on */ })
+              }}
               className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
               aria-label="Remove image"
             >
