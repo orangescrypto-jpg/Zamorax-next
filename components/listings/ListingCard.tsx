@@ -239,11 +239,16 @@ export function ListingCard({ listing }: { listing: Listing }) {
           </div>
         )}
 
-        {/* Location — date removed so location has full width, not truncated */}
-        <div className="mt-auto pt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
-          <MapPin className="h-3 w-3 shrink-0" />
-          <span className="truncate">{listing.city}, {listing.nigerianState}</span>
-        </div>
+        {/* Location — hidden for official/Zamorax Direct listings (backed
+            by Zamorax itself, no seller address relevant to the buyer);
+            shown for regular seller listings so buyers can judge meetup
+            proximity. Date removed so location has full width when shown. */}
+        {!listing.isOfficial && (
+          <div className="mt-auto pt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+            <MapPin className="h-3 w-3 shrink-0" />
+            <span className="truncate">{listing.city}, {listing.nigerianState}</span>
+          </div>
+        )}
 
         {/* Actions — WhatsApp moved to listing detail page only */}
         <div className="flex gap-1.5 sm:gap-2 mt-2 pt-2 border-t border-border/50">
