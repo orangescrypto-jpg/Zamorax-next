@@ -183,6 +183,12 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
     }
   }, [methodAutoSet, fbzAvailable, zlaOffered, zlaAvailable, zlaCovered])
   const [fbzFee, setFbzFee] = useState(0)
+  // Buyer's doorstep choice — true means "deliver to my address" (adds the
+  // doorstep fee on top of the base zone/route rate), false means "I'll
+  // pick up" (base rate only, no doorstep fee). Defaults to true so the
+  // existing always-delivered behavior doesn't silently change for anyone
+  // who never touches the new toggle.
+  const [isDoorstep, setIsDoorstep] = useState(true)
 
   // ZLA fee + coverage — same zone-based LogisticsService pricing engine
   // FBZ uses below, but "from" is the seller's own state (they're
@@ -199,7 +205,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           const pricing = await LogisticsService.getPricing()
           const feeBreakdown = LogisticsService.calculateFee(
             listing.nigerianState!, state, pricing,
-            { weightKg: listing.weightKg, isFragile: listing.isFragile },
+            { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
           )
           if (!cancelled) setZlaFee(feeBreakdown.total)
         }
@@ -208,7 +214,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
       }
     })()
     return () => { cancelled = true }
-  }, [zlaOffered, zlaAvailable, state])
+  }, [zlaOffered, zlaAvailable, state, isDoorstep])
 
   // FBZ Express fee — same zone-based LogisticsService pricing used across
   // the app, dispatched from the nearest active FBZ warehouse (not the
@@ -230,7 +236,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
         // state, never the seller's own state.
         const feeBreakdown = await LogisticsService.getFbzDeliveryFee(
           warehouse.state, state,
-          { weightKg: listing.weightKg, isFragile: listing.isFragile },
+          { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
         )
         if (!cancelled) setFbzFee(feeBreakdown.total)
       } catch {
@@ -238,7 +244,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
       }
     })()
     return () => { cancelled = true }
-  }, [fbzAvailable, state])
+  }, [fbzAvailable, state, isDoorstep])
 
   // Single last-used address, auto-overwritten on each successful order.
   // Prefills the address step so returning buyers don't re-type it, but
@@ -338,6 +344,8 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
               deliveryState:   state,
               deliveryLGA:     lga.trim(),
               deliveryMethod:  deliveryMethod,
+              isDoorstepDelivery: (deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics")
+                ? isDoorstep : null,
               sellerState:     listing.nigerianState ?? "",
               buyerState:      state,
               itemPrice:       itemPriceKobo,
@@ -416,6 +424,8 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           deliveryState:   state,
           deliveryLGA:     lga.trim(),
           deliveryMethod:  deliveryMethod,
+          isDoorstepDelivery: (deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics")
+            ? isDoorstep : null,
           sellerState:     listing.nigerianState,
           buyerState:      state,
           itemPrice:       itemPriceKobo,
@@ -753,20 +763,64 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                     </p>
                   </div>
 
-                  {/* Door delivery fee — only when FBZ or ZamoraxLogic is the
-                      SELECTED method. No pickup station shown: buyers only
-                      learn that location by phone once goods arrive in
-                      their state. */}
+                  {/* Doorstep vs pickup — buyer's actual choice. Only shown
+                      when a live-computed fee applies (not a listing's flat
+                      override, which is a single fixed price regardless of
+                      doorstep/pickup). Toggling this re-fires the fee
+                      effects above and recalculates deliveryFeeKobo live. */}
+                  {(deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics") && listing.deliveryFeeOverrideKobo == null && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Doorstep or pickup?</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsDoorstep(true)}
+                          className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                            isDoorstep
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <p className="text-xs font-semibold">Door Delivery</p>
+                          <p className="text-[10px] text-muted-foreground">Delivered to your address</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsDoorstep(false)}
+                          className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                            !isDoorstep
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <p className="text-xs font-semibold">Pickup Station</p>
+                          <p className="text-[10px] text-muted-foreground">Cheaper — collect it yourself</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery fee — reflects the buyer's doorstep/pickup
+                      choice above (or the listing's flat override, when
+                      set). SELECTED method only. */}
                   {(deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics") && (
                     <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-foreground">Door Delivery</span>
+                        <span className="text-xs font-semibold text-foreground">
+                          {listing.deliveryFeeOverrideKobo != null
+                            ? "Delivery Fee"
+                            : isDoorstep ? "Door Delivery" : "Pickup Station"}
+                        </span>
                         <span className="text-xs font-semibold">
                           {deliveryFeeKobo > 0 ? formatPrice(deliveryFeeKobo) : "Free"}
                         </span>
                       </div>
                       <p className="text-[10px] text-muted-foreground">
-                        Delivered to your address. We'll call you once it arrives in your state.
+                        {listing.deliveryFeeOverrideKobo != null
+                          ? "Delivered to your address. We'll call you once it arrives in your state."
+                          : isDoorstep
+                            ? "Delivered to your address. We'll call you once it arrives in your state."
+                            : "Collect from the nearest pickup station in your state once it arrives — we'll call you."}
                       </p>
                     </div>
                   )}
