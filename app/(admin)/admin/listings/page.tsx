@@ -349,7 +349,7 @@ export default function AdminListingsPage() {
                       )}
                     </Button>
                   )}
-                  {listing.status === "active" && (listing.isFBZ || listing.isZamoraxPick) && (
+                  {listing.status === "active" && (listing.isFBZ || listing.isZamoraxPick || listing.isOfficial) && (
                     <Button
                       size="sm"
                       variant={listing.deliveryFeeOverrideKobo === 0 ? "secondary" : "outline"}
@@ -357,8 +357,8 @@ export default function AdminListingsPage() {
                       disabled={processingId === listing.id}
                       onClick={() => runAction(listing.id, listing.deliveryFeeOverrideKobo === 0 ? "unset_fbz_free_delivery" : "set_fbz_free_delivery")}
                       title={listing.deliveryFeeOverrideKobo === 0
-                        ? "Remove free delivery — buyers will see the normal calculated FBZ fee again"
-                        : "Buyers will see Free Delivery on this FBZ listing, regardless of their state"}
+                        ? "Remove free delivery — buyers will see the normal calculated delivery fee again"
+                        : "Buyers will see Free Delivery on this listing, regardless of their state or delivery method"}
                     >
                       {processingId === listing.id ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
