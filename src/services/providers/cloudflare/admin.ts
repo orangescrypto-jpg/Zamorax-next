@@ -177,6 +177,19 @@ function rowToDoc(row: Record<string, unknown>): FirestoreDoc {
     }
   }
 
+  // FIX: the D1 column is delivery_options, which the camelCase conversion
+  // above turns into "deliveryOptions" — but every caller (edit pages,
+  // Step5bShipment, the admin FBZ queue) reads/writes "shippingMethods",
+  // the name ListingsService's dedicated mapRow uses. Generic AdminService
+  // reads never exposed that alias, so pages using AdminService.getDoc
+  // directly (e.g. the seller listing edit page) always saw
+  // shippingMethods as undefined and silently fell back to ["meetup"],
+  // even when FBZ (or any other method) was actually saved in D1 — the
+  // listing would visibly "revert" to Meet Up on every reload. Aliased
+  // after the JSON-parsing loop above so this carries the parsed array,
+  // not the raw JSON string.
+  if ("deliveryOptions" in doc && !("shippingMethods" in doc)) doc.shippingMethods = doc.deliveryOptions
+
   // The listings table's price column is just "price" (kobo) — the Listing
   // type everywhere else in the app reads it as priceSale. Alias it so
   // generic reads match what ListingCard/SellerListingCard expect.
