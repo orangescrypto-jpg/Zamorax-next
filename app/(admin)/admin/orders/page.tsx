@@ -58,6 +58,11 @@ interface AdminOrder {
   // behalf (fulfilledBy = "zamorax") is only allowed when this is true.
   isOfficial:       boolean
   fulfilledBy:      string
+  deliveryStreet:   string
+  deliveryCity:     string
+  deliveryState:    string
+  deliveryLGA:      string
+  deliveryMethod:   string
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -288,6 +293,10 @@ export function AdminOrdersPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {o.paymentProvider || "—"} {o.paymentReference && `· ${o.paymentReference}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {o.deliveryMethod === "fbz" ? "FBZ Express — " : o.deliveryMethod ? "Meetup — " : ""}
+                        {[o.deliveryStreet, o.deliveryLGA, o.deliveryCity, o.deliveryState].filter(Boolean).join(", ") || "No address on file"}
                       </p>
                     </div>
                     <div className="text-right shrink-0 space-y-1">
