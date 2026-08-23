@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, ArrowLeft, Save, Layers, Plus, Trash2, Users, Package, Zap } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Loader2, ArrowLeft, Save, Layers, Plus, Trash2, Users, Package, Zap, Percent } from "lucide-react"
 import { nigerianStates } from "@/constants/nigerianStates"
 import { ShippingService, type ShippingMethodConfig } from "@/src/services"
 
@@ -40,6 +41,11 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     minOrderQty: "", unitOfSale: "piece", offersEnabled: true,
     lowStockThreshold: "",
   })
+  // Standing discount — plain permanent price cut, no code/expiry. Kept
+  // separate from `form` since discountPercent is only meaningful while
+  // enabled is true (same pattern used for bulkPricing above).
+  const [standingDiscountEnabled, setStandingDiscountEnabled] = useState(false)
+  const [standingDiscountPercent, setStandingDiscountPercent] = useState("")
   // Delivery methods this listing offers — same shape as the posting flow's
   // Step5bShipment (shippingMethods array on the listing). Kept separate
   // from `form` since it's an array, not a scalar field.
@@ -84,6 +90,8 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         offersEnabled: data.offersEnabled !== false,
         lowStockThreshold: data.lowStockThreshold != null ? String(data.lowStockThreshold) : "",
       })
+      setStandingDiscountEnabled(!!data.standingDiscount)
+      setStandingDiscountPercent(data.standingDiscount?.discountPercent != null ? String(data.standingDiscount.discountPercent) : "")
       setBulkPricing(
         Array.isArray(data.bulkPricing)
           ? data.bulkPricing.map((t: { minQty: number; price: number }) => ({
@@ -107,6 +115,10 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
   const handleSave = async () => {
     if (!form.title.trim() || !form.description.trim()) {
       toast({ title: "Title and description are required", variant: "destructive" })
+      return
+    }
+    if (standingDiscountEnabled && standingDiscountPercent.trim() === "") {
+      toast({ title: "Enter a discount percentage", variant: "destructive" })
       return
     }
     // If seller just checked FBZ on a listing that isn't already FBZ-active,
@@ -172,6 +184,9 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         unitOfSale: form.unitOfSale || "piece",
         offersEnabled: form.offersEnabled,
         lowStockThreshold: form.lowStockThreshold.trim() !== "" ? parseInt(form.lowStockThreshold) : undefined,
+        standingDiscount: standingDiscountEnabled && standingDiscountPercent.trim() !== ""
+          ? { discountPercent: parseInt(standingDiscountPercent) }
+          : null,
         bulkPricing: bulkPricing
           .filter(t => t.minQty.trim() !== "" && t.price.trim() !== "")
           .map(t => ({ minQty: parseInt(t.minQty), price: Math.round(parseFloat(t.price) * 100) })),
@@ -308,6 +323,49 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
               <Input type="number" value={form.priceRentDaily} onChange={set("priceRentDaily")} placeholder="e.g. 5000" />
             </div>
           )}
+
+          {/* Standing discount — plain permanent price cut, no code, no
+              timer. Shows to buyers as a struck-through price, nothing
+              labeled "discount" or "flash deal". */}
+          <div className="rounded-xl border border-border/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="flex items-center gap-2">
+                  <Percent className="h-4 w-4 text-primary" />
+                  Price Cut <span className="text-muted-foreground text-xs">(optional)</span>
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Show a lower price right away — no code, no timer.
+                </p>
+              </div>
+              <Switch
+                checked={standingDiscountEnabled}
+                onCheckedChange={(v) => {
+                  setStandingDiscountEnabled(v)
+                  if (!v) setStandingDiscountPercent("")
+                }}
+              />
+            </div>
+            {standingDiscountEnabled && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Discount percentage</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={standingDiscountPercent}
+                  onChange={(e) => setStandingDiscountPercent(e.target.value)}
+                  placeholder="e.g. 5"
+                />
+                {standingDiscountPercent.trim() !== "" && form.priceSale.trim() !== "" && (
+                  <p className="text-xs text-muted-foreground">
+                    Buyers will see ₦{Math.round(parseFloat(form.priceSale) * (1 - parseInt(standingDiscountPercent || "0") / 100)).toLocaleString()} instead of ₦{Number(form.priceSale).toLocaleString()}.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label>Stock Quantity <span className="text-muted-foreground text-xs">(leave blank for unlimited)</span></Label>
             <Input
