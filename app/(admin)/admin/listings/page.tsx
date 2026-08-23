@@ -28,7 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
   Loader2, CheckCircle2, XCircle, Trash2, Zap, ZapOff,
-  Search, RefreshCw, Package, ChevronLeft, ChevronRight, ShieldCheck,
+  Search, RefreshCw, Package, ChevronLeft, ChevronRight, ShieldCheck, Truck,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import Image from "next/image"
@@ -48,6 +48,8 @@ interface AdminListingRow {
   isZamoraxPick?: boolean
   isOfficial?: boolean
   fulfilledBy?: "seller" | "zamorax"
+  isFBZ?: boolean
+  deliveryFeeOverrideKobo?: number | null
   city?: string
   views?: number
   createdAt?: string
@@ -112,7 +114,7 @@ export default function AdminListingsPage() {
   // Reset to page 0 whenever the filter or search term changes
   useEffect(() => { setPage(0) }, [status, search])
 
-  const runAction = async (id: string, action: "approve" | "reject" | "boost" | "unboost" | "zamorax_pick" | "zamorax_unpick" | "set_fulfilled_by_seller" | "set_fulfilled_by_zamorax", reason?: string) => {
+  const runAction = async (id: string, action: "approve" | "reject" | "boost" | "unboost" | "zamorax_pick" | "zamorax_unpick" | "set_fulfilled_by_seller" | "set_fulfilled_by_zamorax" | "set_fbz_free_delivery" | "unset_fbz_free_delivery", reason?: string) => {
     setProcessingId(id)
     try {
       const res = await adminFetch("/api/admin/manage-listings", {
@@ -131,6 +133,8 @@ export default function AdminListingsPage() {
         zamorax_unpick: "Removed from Zamorax Enterprises Direct",
         set_fulfilled_by_zamorax: "Zamorax will fulfill this listing's orders 📦",
         set_fulfilled_by_seller:  "Seller will fulfill this listing's orders again",
+        set_fbz_free_delivery:    "Free delivery enabled for this listing 🚚",
+        unset_fbz_free_delivery:  "Free delivery removed — normal FBZ fee applies",
       }
       toast({ title: labels[action], variant: action === "reject" ? "default" : "success" })
       await load()
@@ -332,6 +336,26 @@ export default function AdminListingsPage() {
                         <><Package className="h-3 w-3 mr-1" />Hand Back to Seller</>
                       ) : (
                         <><Package className="h-3 w-3 mr-1" />Fulfill by Zamorax</>
+                      )}
+                    </Button>
+                  )}
+                  {listing.status === "active" && listing.isFBZ && (
+                    <Button
+                      size="sm"
+                      variant={listing.deliveryFeeOverrideKobo === 0 ? "secondary" : "outline"}
+                      className="h-7 text-xs"
+                      disabled={processingId === listing.id}
+                      onClick={() => runAction(listing.id, listing.deliveryFeeOverrideKobo === 0 ? "unset_fbz_free_delivery" : "set_fbz_free_delivery")}
+                      title={listing.deliveryFeeOverrideKobo === 0
+                        ? "Remove free delivery — buyers will see the normal calculated FBZ fee again"
+                        : "Buyers will see Free Delivery on this FBZ listing, regardless of their state"}
+                    >
+                      {processingId === listing.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : listing.deliveryFeeOverrideKobo === 0 ? (
+                        <><Truck className="h-3 w-3 mr-1" />Remove Free Delivery</>
+                      ) : (
+                        <><Truck className="h-3 w-3 mr-1" />Make Free Delivery</>
                       )}
                     </Button>
                   )}
