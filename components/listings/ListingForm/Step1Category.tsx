@@ -35,7 +35,7 @@ export function Step1Category() {
           name="categorySlug"
           control={control}
           render={({ field }) => (
-            <Select onValueChange={field.onChange} value={field.value} disabled={!!category}>
+            <Select onValueChange={field.onChange} value={field.value}>
               <SelectTrigger><SelectValue placeholder="Choose category" /></SelectTrigger>
               <SelectContent>
                 {ALL_CATEGORIES.map(cat => (
