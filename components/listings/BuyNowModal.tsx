@@ -157,6 +157,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   const [zlaAvailable, setZlaAvailable] = useState(false)
   const [zlaCovered, setZlaCovered] = useState(false)
   const [zlaFee, setZlaFee] = useState(0)
+  const [zlaBreakdown, setZlaBreakdown] = useState<import("@/src/services/logistics").DeliveryFeeBreakdown | null>(null)
   useEffect(() => {
     if (!zlaOffered) return
     ShippingService.getConfig().then(cfg => setZlaAvailable(cfg.zlaEnabled))
@@ -183,6 +184,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
     }
   }, [methodAutoSet, fbzAvailable, zlaOffered, zlaAvailable, zlaCovered])
   const [fbzFee, setFbzFee] = useState(0)
+  const [fbzBreakdown, setFbzBreakdown] = useState<import("@/src/services/logistics").DeliveryFeeBreakdown | null>(null)
   // Buyer's doorstep choice — true means "deliver to my address" (adds the
   // doorstep fee on top of the base zone/route rate), false means "I'll
   // pick up" (base rate only, no doorstep fee). Defaults to true so the
@@ -207,7 +209,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
             listing.nigerianState!, state, pricing,
             { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
           )
-          if (!cancelled) setZlaFee(feeBreakdown.total)
+          if (!cancelled) { setZlaFee(feeBreakdown.total); setZlaBreakdown(feeBreakdown) }
         }
       } catch {
         if (!cancelled) setZlaCovered(false)
@@ -238,7 +240,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           warehouse.state, state,
           { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
         )
-        if (!cancelled) setFbzFee(feeBreakdown.total)
+        if (!cancelled) { setFbzFee(feeBreakdown.total); setFbzBreakdown(feeBreakdown) }
       } catch {
         // Leave at 0 rather than blocking checkout on a pricing-fetch failure.
       }
@@ -756,9 +758,9 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                     <AlertCircle className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                     <p className="text-[11px] text-blue-700">
                       {deliveryMethod === "fbz"
-                        ? "Ships nationwide from our warehouse — no need to coordinate with the seller."
+                        ? "Ships nationwide from our warehouse. No need to coordinate with the seller."
                         : deliveryMethod === "zamorax_logistics"
-                          ? "Delivered door-to-door — no need to coordinate with the seller."
+                          ? "Delivered door-to-door. No need to coordinate with the seller."
                           : <>You can also arrange <strong>meetup</strong> with the seller after placing your order.</>}
                     </p>
                   </div>
@@ -794,7 +796,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                           }`}
                         >
                           <p className="text-xs font-semibold">Pickup Station</p>
-                          <p className="text-[10px] text-muted-foreground">Cheaper — collect it yourself</p>
+                          <p className="text-[10px] text-muted-foreground">Cheaper. Collect it yourself</p>
                         </button>
                       </div>
                     </div>
@@ -804,7 +806,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       choice above (or the listing's flat override, when
                       set). SELECTED method only. */}
                   {(deliveryMethod === "fbz" || deliveryMethod === "zamorax_logistics") && (
-                    <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1">
+                    <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-foreground">
                           {listing.deliveryFeeOverrideKobo != null
@@ -815,12 +817,49 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                           {deliveryFeeKobo > 0 ? formatPrice(deliveryFeeKobo) : "Free"}
                         </span>
                       </div>
+
+                      {/* Line-item breakdown — only for live-computed fees
+                          (a listing override is a single flat price with
+                          nothing to break down). Shows base route/zone
+                          rate, weight surcharge (reads the seller-set
+                          weight against admin's tiers), and doorstep fee
+                          only if actually chosen, so buyers can see what
+                          each part actually is instead of one lump sum. */}
+                      {listing.deliveryFeeOverrideKobo == null && (() => {
+                        const bd = deliveryMethod === "fbz" ? fbzBreakdown : zlaBreakdown
+                        if (!bd) return null
+                        return (
+                          <div className="pt-1.5 border-t border-border/60 space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>Base fee ({bd.routeLabel})</span>
+                              <span>{bd.base > 0 ? formatPrice(bd.base) : "Free"}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                              <span>Weight fee ({listing.weightKg ?? 0.5}kg)</span>
+                              <span>{bd.weightSurcharge > 0 ? formatPrice(bd.weightSurcharge) : "Free"}</span>
+                            </div>
+                            {isDoorstep && (
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                <span>Doorstep fee</span>
+                                <span>{bd.doorstepFee > 0 ? formatPrice(bd.doorstepFee) : "Free"}</span>
+                              </div>
+                            )}
+                            {bd.fragileFee > 0 && (
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                <span>Fragile handling fee</span>
+                                <span>{formatPrice(bd.fragileFee)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+
                       <p className="text-[10px] text-muted-foreground">
                         {listing.deliveryFeeOverrideKobo != null
                           ? "Delivered to your address. We'll call you once it arrives in your state."
                           : isDoorstep
                             ? "Delivered to your address. We'll call you once it arrives in your state."
-                            : "Collect from the nearest pickup station in your state once it arrives — we'll call you."}
+                            : "Collect from the nearest pickup station in your state once it arrives. We'll call you."}
                       </p>
                     </div>
                   )}
@@ -921,7 +960,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   ) : (
                     <div className="rounded-lg border bg-muted/20 px-3 py-2">
                       <p className="text-xs text-muted-foreground">
-                        Payment via {selectedMethod?.label ?? "—"}
+                        Payment via {selectedMethod?.label ?? "-"}
                       </p>
                     </div>
                   )}
