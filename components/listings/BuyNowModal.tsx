@@ -51,6 +51,7 @@ interface Props {
     sellerName?: string
     sellerStoreName?: string
     nigerianState?: string
+    estimatedDeliveryDays?: string
   }
   // Quantity the buyer selected on the listing page (bulk-pricing tiles or
   // the +/- stepper). listing.priceSale is treated as the PER-UNIT price
