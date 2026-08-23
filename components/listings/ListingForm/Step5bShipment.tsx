@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 type Method = "meetup" | "zamorax_logistics" | "fbz"
 
@@ -318,6 +319,84 @@ export function Step5bShipment() {
                   </p>
                   <WarehouseList warehouses={fbzWarehouses} />
                 </div>
+              </div>
+            )}
+
+            {/* Warehouse + quantity picker — shown once FBZ is selected, so
+                the shipment request is captured in the same step instead of
+                sending the seller to a separate /dashboard/fbz visit after
+                the listing is created. Only warehouses currently accepting
+                stock are selectable. */}
+            {isOn("fbz") && (
+              <div className="px-4 pb-4 space-y-3 border-t pt-3 mx-4 mb-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">
+                    Send stock to which warehouse?
+                  </Label>
+                  {fbzWarehouses.filter(w => w.acceptingStock).length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No warehouse is currently accepting stock — you can still list with FBZ
+                      selected, but ship-to-warehouse will need to wait until one opens.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {fbzWarehouses.filter(w => w.acceptingStock).map(w => (
+                        <div
+                          key={w.id}
+                          onClick={() => setValue("fbzWarehouseId", w.id, { shouldValidate: true })}
+                          className={cn(
+                            "flex items-center justify-between gap-2 text-xs rounded-lg px-2.5 py-2 border cursor-pointer",
+                            watch("fbzWarehouseId") === w.id
+                              ? "border-amber-500 bg-amber-100/60"
+                              : "border-border bg-white hover:border-amber-300"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground truncate">{w.name}</p>
+                            <p className="text-muted-foreground flex items-center gap-1">
+                              <MapPin className="h-2.5 w-2.5 shrink-0" />{w.city}, {w.state}
+                            </p>
+                          </div>
+                          {watch("fbzWarehouseId") === w.id && (
+                            <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">
+                    Quantity you'll send to the warehouse
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 15"
+                    {...register("fbzQuantity", { valueAsNumber: true })}
+                    className="max-w-[160px]"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    No fixed minimum or maximum — send what you have. Admin will confirm the
+                    actual count when it arrives at the warehouse.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">
+                    Notes for warehouse team (optional)
+                  </Label>
+                  <Input
+                    placeholder="e.g. All items are sealed, accessories included..."
+                    {...register("fbzNotes")}
+                  />
+                </div>
+
+                <p className="text-xs text-amber-700 bg-amber-100/60 rounded-lg px-2.5 py-2">
+                  This listing won't go live until admin confirms your stock has arrived and
+                  activates it — this is in addition to the normal listing review.
+                </p>
               </div>
             )}
           </div>
