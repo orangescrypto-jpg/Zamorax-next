@@ -352,8 +352,10 @@ export default function AdminListingsPage() {
                   {listing.status === "active" && (listing.isFBZ || listing.isZamoraxPick || listing.isOfficial) && (
                     <Button
                       size="sm"
-                      variant={listing.deliveryFeeOverrideKobo === 0 ? "secondary" : "outline"}
-                      className="h-7 text-xs"
+                      variant={listing.deliveryFeeOverrideKobo === 0 ? "default" : "outline"}
+                      className={listing.deliveryFeeOverrideKobo === 0
+                        ? "h-7 text-xs bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                        : "h-7 text-xs"}
                       disabled={processingId === listing.id}
                       onClick={() => runAction(listing.id, listing.deliveryFeeOverrideKobo === 0 ? "unset_fbz_free_delivery" : "set_fbz_free_delivery")}
                       title={listing.deliveryFeeOverrideKobo === 0
