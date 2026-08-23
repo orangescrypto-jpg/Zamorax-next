@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, ArrowLeft, Save, Layers, Plus, Trash2 } from "lucide-react"
+import { Loader2, ArrowLeft, Save, Layers, Plus, Trash2, Users, Package, Zap } from "lucide-react"
 import { nigerianStates } from "@/constants/nigerianStates"
+import { ShippingService, type ShippingMethodConfig } from "@/src/services"
 
 const CONDITIONS = [
   { value: "brand_new", label: "Brand New" },
@@ -39,6 +40,11 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     minOrderQty: "", unitOfSale: "piece", offersEnabled: true,
     lowStockThreshold: "",
   })
+  // Delivery methods this listing offers — same shape as the posting flow's
+  // Step5bShipment (shippingMethods array on the listing). Kept separate
+  // from `form` since it's an array, not a scalar field.
+  const [shippingMethods, setShippingMethods] = useState<("meetup" | "zamorax_logistics" | "fbz")[]>(["meetup"])
+  const [shippingConfig, setShippingConfig] = useState<ShippingMethodConfig | null>(null)
   // Bulk pricing tiers — naira values as strings while editing, same
   // pattern as priceSale/priceRentDaily above. Converted to kobo on save.
   const [bulkPricing, setBulkPricing] = useState<{ minQty: string; price: string }[]>([])
@@ -49,9 +55,13 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
       if (!snap) { setLoading(false); return }
       const data = snap as any
 
-      if (data.sellerId !== user?.uid) { router.replace("/dashboard/seller/listings"); return }
+      // Owners can edit their own listing; admin/moderator can edit any
+      // listing for support/moderation purposes.
+      const isStaff = user?.role === "admin" || user?.role === "moderator"
+      if (data.sellerId !== user?.uid && !isStaff) { router.replace("/dashboard/seller/listings"); return }
 
       setListing(data)
+      setShippingMethods(Array.isArray(data.shippingMethods) && data.shippingMethods.length > 0 ? data.shippingMethods : ["meetup"])
       setForm({
         title: data.title || "",
         description: data.description || "",
@@ -81,6 +91,13 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     if (user?.uid) load()
   }, [id, user?.uid, router])
 
+  // Admin-enabled delivery methods — same source Step5bShipment uses when
+  // posting a new listing, so this edit form only offers methods admin
+  // currently has switched on (e.g. hides FBZ entirely if fbzEnabled is off).
+  useEffect(() => {
+    ShippingService.getConfig().then(setShippingConfig)
+  }, [])
+
   const handleSave = async () => {
     if (!form.title.trim() || !form.description.trim()) {
       toast({ title: "Title and description are required", variant: "destructive" })
@@ -97,6 +114,7 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         city: form.city.trim(),
         nigerianState: form.nigerianState,
         deliveryNationwide: form.deliveryNationwide,
+        shippingMethods: shippingMethods.length > 0 ? shippingMethods : ["meetup"],
         // Used/graded items are implicitly one-of-a-kind unless the seller
         // says otherwise — mirrors the same default applied at creation
         // time (see ListingForm/index.tsx). Only kicks in when stockQty
@@ -367,6 +385,70 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
               className="rounded" />
             <span className="text-sm">Deliver nationwide</span>
           </label>
+
+          <div className="space-y-1.5">
+            <Label>Delivery Methods</Label>
+            <p className="text-xs text-muted-foreground">Choose how buyers can receive this item.</p>
+            <div className="space-y-2 pt-1">
+              {shippingConfig?.meetupEnabled !== false && (
+                <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
+                  <input
+                    type="checkbox"
+                    checked={shippingMethods.includes("meetup")}
+                    onChange={() => setShippingMethods(prev =>
+                      prev.includes("meetup") ? prev.filter(m => m !== "meetup") : [...prev, "meetup"])}
+                    className="mt-0.5 rounded"
+                  />
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">Safe Meet Up</p>
+                      <p className="text-xs text-muted-foreground">Buyer meets you at a safe public spot. Free.</p>
+                    </div>
+                  </div>
+                </label>
+              )}
+              {shippingConfig?.zlaEnabled && (
+                <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
+                  <input
+                    type="checkbox"
+                    checked={shippingMethods.includes("zamorax_logistics")}
+                    onChange={() => setShippingMethods(prev =>
+                      prev.includes("zamorax_logistics") ? prev.filter(m => m !== "zamorax_logistics") : [...prev, "zamorax_logistics"])}
+                    className="mt-0.5 rounded"
+                  />
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">ZamoraxLogic Delivery</p>
+                      <p className="text-xs text-muted-foreground">Drop parcel at nearest agent — delivered anywhere in Nigeria.</p>
+                    </div>
+                  </div>
+                </label>
+              )}
+              {shippingConfig?.fbzEnabled && (
+                <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
+                  <input
+                    type="checkbox"
+                    checked={shippingMethods.includes("fbz")}
+                    onChange={() => setShippingMethods(prev =>
+                      prev.includes("fbz") ? prev.filter(m => m !== "fbz") : [...prev, "fbz"])}
+                    className="mt-0.5 rounded"
+                  />
+                  <div className="flex items-start gap-2">
+                    <Zap className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">Fulfilled by Zamorax</p>
+                      <p className="text-xs text-muted-foreground">
+                        Only offered to buyers once your stock is verified at a Zamorax warehouse.
+                      </p>
+                    </div>
+                  </div>
+                </label>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Estimated Delivery Time <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input
