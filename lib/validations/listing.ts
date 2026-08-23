@@ -88,6 +88,13 @@ export const listingSchema = z.object({
     .optional(),
   couponDiscountPercent: z.number().int().min(1).max(90).optional(),
 
+  // Standing discount (optional) — a plain, permanent price cut. No expiry,
+  // no code, never labeled "discount"/"flash deal" in the UI — just shows
+  // as a struck-through price. Settable at creation or edit, always
+  // available (not gated on an admin sub-setting like coupons are).
+  standingDiscountEnabled: z.boolean().optional(),
+  standingDiscountPercent: z.number().int().min(1).max(90).optional(),
+
   // Step 7: Boost
   boostType: z.enum(["none", "standard", "premium", "category_top"]).default("none"),
 
@@ -107,6 +114,13 @@ export const listingSchema = z.object({
   {
     message: "Enter a coupon code (min 3 characters) and a discount percentage",
     path: ["couponCode"],
+  }
+)
+.refine(
+  data => !data.standingDiscountEnabled || !!data.standingDiscountPercent,
+  {
+    message: "Enter a discount percentage",
+    path: ["standingDiscountPercent"],
   }
 )
 .refine(
