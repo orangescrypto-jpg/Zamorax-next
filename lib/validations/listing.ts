@@ -69,6 +69,13 @@ export const listingSchema = z.object({
   // Optional seller-stated delivery window, e.g. "2-4 days" — free text, kept short.
   estimatedDeliveryDays: z.string().max(20).optional(),
 
+  // FBZ ship-to-warehouse details — only required when "fbz" is one of the
+  // chosen shippingMethods (enforced below via .refine, not here, since
+  // these fields don't exist/aren't required for non-FBZ listings).
+  fbzWarehouseId: z.string().optional(),
+  fbzQuantity: z.number().int().positive().optional(),
+  fbzNotes: z.string().max(500).optional(),
+
   // Step 6: Coupon (optional) — seller sets a standing discount code for
   // this listing. Only shown/usable when sub_settings.couponsEnabled is on;
   // the schema stays permissive here since the toggle gates the UI, not
@@ -87,6 +94,14 @@ export const listingSchema = z.object({
   // Step 8: Rules
   acceptTerms: z.literal(true, { errorMap: () => ({ message: "You must accept the listing rules" }) })
 })
+.refine(
+  data => !data.shippingMethods?.includes("fbz") || !!data.fbzWarehouseId,
+  { message: "Select a warehouse to send your FBZ stock to", path: ["fbzWarehouseId"] }
+)
+.refine(
+  data => !data.shippingMethods?.includes("fbz") || (!!data.fbzQuantity && data.fbzQuantity > 0),
+  { message: "Enter the quantity you'll send to the warehouse", path: ["fbzQuantity"] }
+)
 .refine(
   data => !data.couponEnabled || (!!data.couponCode && data.couponCode.length >= 3 && !!data.couponDiscountPercent),
   {
