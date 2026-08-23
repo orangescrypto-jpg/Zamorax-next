@@ -621,6 +621,12 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                 Delivered in {listing.estimatedDeliveryDays}
               </div>
             )}
+
+            {!!listing.estimatedDeliveryDays && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Not shipped within {listing.estimatedDeliveryDays}? Contact support for a full refund.
+              </p>
+            )}
           </div>
 
           {/* Price */}
