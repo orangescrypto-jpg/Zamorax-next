@@ -120,6 +120,12 @@ const OWNED_TABLES: Record<string, OwnedTableRule> = {
   // re-uploading — see components/media/MediaLibraryPicker.tsx. Strictly
   // owner-scoped: nobody should see or reuse another user's uploads.
   media_library:      { columns: ["user_id"], insertForceColumn: "user_id" },
+  // A seller creates a shipment request for their own listing (seller-facing
+  // FBZ dashboard: app/(public)/dashboard/fbz) and needs to read back only
+  // their own shipments. Admin actions — mark received, activate, reject —
+  // happen from the admin FBZ dashboard and go through the isStaff bypass
+  // above, so this scoping only ever applies to the seller's own requests.
+  fbz_shipments:      { columns: ["seller_id"], insertForceColumn: "seller_id" },
 }
 
 // listing_qna and reviews have a public-read component (anyone viewing a
