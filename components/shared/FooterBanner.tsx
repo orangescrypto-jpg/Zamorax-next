@@ -20,6 +20,7 @@ interface SiteBanner {
   ctaLabel?: string
   href?: string
   imageUrl?: string
+  mediaType?: "image" | "video"
   bgColor?: string
   textColor?: string
   active: boolean
@@ -59,7 +60,16 @@ export function FooterBanner() {
   // If an image was uploaded, it replaces the title/subtitle/CTA/color card
   // entirely — the image itself is the banner, only the link still applies.
   if (banner.imageUrl) {
-    const imageInner = (
+    const imageInner = banner.mediaType === "video" ? (
+      <video
+        src={banner.imageUrl}
+        className="w-full h-auto rounded-2xl block"
+        autoPlay
+        muted
+        loop
+        playsInline
+      />
+    ) : (
       <img
         src={banner.imageUrl}
         alt={banner.title || ""}
