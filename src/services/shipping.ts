@@ -15,6 +15,16 @@
 
 import { AdminService }        from "@/src/services"
 import { ZamoraxLogicClient }  from "@/lib/zamoraxlogic"
+// FIX: getConfig() used to read admin's enabled/disabled toggles via
+// AdminService.getDoc("config","platform") — a D1 kv_store row keyed
+// "config:platform" that nothing ever writes (admin Settings saves go to a
+// different row, "platform_settings", via POST /api/admin/settings). That
+// meant toggling ZLA (or FBZ) off in admin never actually reached this read
+// — it silently kept falling back to the "enabled: true" defaults below, so
+// ZLA/FBZ kept appearing on the listing form and at checkout regardless of
+// what admin set. Read through the same getPlatformSettings() everything
+// else driven by the admin Settings UI already uses.
+import { getPlatformSettings } from "@/src/services/platformSettings"
 
 export type ShippingMethodKey = "meetup" | "zamorax_logistics" | "fbz"
 
@@ -60,11 +70,11 @@ export const ShippingService = {
   /** Full config — used by seller listing form and buyer checkout */
   async getConfig(): Promise<ShippingMethodConfig> {
     try {
-      const platform = await AdminService.getDoc("config", "platform")
+      const platform = await getPlatformSettings() as unknown as Record<string, any>
 
-      const meetupEnabled = (platform as any)?.safeMeetEnabled  ?? true
-      const zlaEnabled    = (platform as any)?.logisticsEnabled ?? true
-      const fbzEnabled    = (platform as any)?.fbzEnabled       ?? true
+      const meetupEnabled = platform?.safeMeetEnabled  ?? true
+      const zlaEnabled    = platform?.logisticsEnabled ?? true
+      const fbzEnabled    = platform?.fbzEnabled       ?? true
 
       const [zlaCoveredStates, fbzWarehouses] = await Promise.all([
         ShippingService.getZLACoveredStates(),
