@@ -52,10 +52,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       nativeDB,
     )
     const rows = result?.results ?? []
-    // DEBUG: temporary — confirms exactly what this route sees, independent
-    // of the generic proxy. Remove once the empty-list issue is resolved.
-    console.log("[api/fbz/warehouses] GET rows:", rows.length, { hasNativeDB: !!nativeDB })
-    return NextResponse.json({ results: rows, _debug: { count: rows.length, hasNativeDB: !!nativeDB } })
+    return NextResponse.json({ results: rows })
   } catch (err) {
     console.error("[api/fbz/warehouses] GET failed:", err)
     return NextResponse.json(
