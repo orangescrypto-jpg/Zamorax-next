@@ -322,6 +322,12 @@ export interface CartItem {
   couponCode?: string                   // seller coupon code applied, if any (informational — priceSale already reflects the discount)
   quantity: number
   shippingMethods: DeliveryMethod[]     // methods seller supports
+  // Whether this listing's stock is actually verified/held at a Zamorax
+  // warehouse (listing.isFBZ, set only by admin FBZ intake). This is the
+  // real source of truth for offering FBZ Express at checkout — do not
+  // derive FBZ eligibility from shippingMethods alone, which just
+  // reflects delivery methods the seller opted into.
+  isFBZ?: boolean
   weightKg?: number
   isFragile?: boolean
   // Fashion variant selection — set when the listing offers multiple
