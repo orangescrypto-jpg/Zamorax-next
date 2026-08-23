@@ -196,12 +196,18 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       const items = grouped[sid]
       const methods = items[0]?.shippingMethods ?? ["meetup"]
       const allItemsFBZ = items.every(i => i.isFBZ)
-      if (methods.includes("meetup")) {
-        defaults[sid] = { method: "meetup", fee: 0 }
-      } else if (methods.includes("zamorax_logistics")) {
-        defaults[sid] = { method: "zamorax_logistics", fee: sellerZlaFees[sid] ?? 0 }
-      } else if (allItemsFBZ) {
+      // Prefer whatever non-meetup method the seller actually chose and is
+      // currently usable, before falling back to meetup — a legacy listing
+      // saved with more than one method (e.g. ["meetup","fbz"] from before
+      // shipping method became single-select) should still default to the
+      // seller's real premium choice, not silently settle on meetup just
+      // because it happens to be first in the array.
+      if (methods.includes("fbz") && allItemsFBZ && settings.fbzEnabled) {
         defaults[sid] = { method: "fbz", fee: sellerFbzFees[sid] ?? 0 }
+      } else if (methods.includes("zamorax_logistics") && (sellerZlaCoverage[sid] ?? false)) {
+        defaults[sid] = { method: "zamorax_logistics", fee: sellerZlaFees[sid] ?? 0 }
+      } else if (methods.includes("meetup")) {
+        defaults[sid] = { method: "meetup", fee: 0 }
       } else {
         defaults[sid] = { method: "meetup", fee: 0 }
       }
@@ -210,7 +216,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       setDeliverySelections(prev => ({ ...prev, ...defaults }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, grouped, sellerFbzFees, sellerZlaFees])
+  }, [step, grouped, sellerFbzFees, sellerZlaFees, sellerZlaCoverage])
 
   const handleStep1Next = () => {
     if (!street.trim() || !city.trim() || !state || !lga.trim()) {
@@ -531,6 +537,16 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                             selected={selected?.method === "fbz"}
                             onSelect={() => setDeliverySelections(prev => ({ ...prev, [sellerId]: { method: "fbz", fee: sellerFbzFees[sellerId] ?? 0 } }))}
                           />
+                        )}
+                        {/* Seller picked FBZ as their shipping method, but this
+                            stock hasn't been admin-activated at a warehouse yet
+                            (listing.isFBZ still false) — FBZ Express can't be
+                            offered until that happens. Surface why, instead of
+                            silently falling back to meetup with no explanation. */}
+                        {!allItemsFBZ && methods.includes("fbz") && (
+                          <p className="text-[10px] text-muted-foreground italic px-1">
+                            Seller selected FBZ Express for this item, but the stock hasn't been confirmed at a Zamorax warehouse yet — only the methods below are available for now.
+                          </p>
                         )}
                       </div>
 
