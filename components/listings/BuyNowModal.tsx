@@ -254,11 +254,13 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // directly, no charge). For FBZ: the listing's manual override wins if
   // set (including 0, for a listing marked free-delivery); otherwise the
   // live-calculated fbzFee, which is 0 until pricing has loaded.
-  const deliveryFeeKobo = deliveryMethod === "fbz"
-    ? (listing.deliveryFeeOverrideKobo ?? fbzFee)
-    : deliveryMethod === "zamorax_logistics"
-      ? zlaFee
-      : 0
+  const deliveryFeeKobo = listing.deliveryFeeOverrideKobo != null
+    ? listing.deliveryFeeOverrideKobo
+    : deliveryMethod === "fbz"
+      ? fbzFee
+      : deliveryMethod === "zamorax_logistics"
+        ? zlaFee
+        : 0
   const buyerTotalWithDeliveryKobo = breakdown.buyerTotalKobo + deliveryFeeKobo
 
   const sellerDisplayName =
@@ -664,9 +666,16 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                                 : "border-border hover:border-primary/40"
                             }`}
                           >
-                            <p className="text-xs font-semibold">ZamoraxLogic</p>
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs font-semibold">ZamoraxLogic</p>
+                              {listing.deliveryFeeOverrideKobo === 0 && (
+                                <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-muted-foreground">
-                              Door delivery{zlaFee > 0 ? ` · ${formatPrice(zlaFee)}` : ""}
+                              {listing.deliveryFeeOverrideKobo === 0
+                                ? "Door delivery"
+                                : `Door delivery${zlaFee > 0 ? ` · ${formatPrice(zlaFee)}` : ""}`}
                             </p>
                           </button>
                         )}
