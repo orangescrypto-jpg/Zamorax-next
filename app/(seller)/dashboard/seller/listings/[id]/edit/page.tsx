@@ -439,16 +439,16 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
 
           <div className="space-y-1.5">
             <Label>Delivery Methods</Label>
-            <p className="text-xs text-muted-foreground">Choose how buyers can receive this item.</p>
+            <p className="text-xs text-muted-foreground">Choose how buyers can receive this item. You can only pick one method.</p>
             <div className="space-y-2 pt-1">
               {shippingConfig?.meetupEnabled !== false && (
                 <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="shippingMethod"
                     checked={shippingMethods.includes("meetup")}
-                    onChange={() => setShippingMethods(prev =>
-                      prev.includes("meetup") ? prev.filter(m => m !== "meetup") : [...prev, "meetup"])}
-                    className="mt-0.5 rounded"
+                    onChange={() => setShippingMethods(["meetup"])}
+                    className="mt-0.5"
                   />
                   <div className="flex items-start gap-2">
                     <Users className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
@@ -462,11 +462,11 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
               {shippingConfig?.zlaEnabled && (
                 <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="shippingMethod"
                     checked={shippingMethods.includes("zamorax_logistics")}
-                    onChange={() => setShippingMethods(prev =>
-                      prev.includes("zamorax_logistics") ? prev.filter(m => m !== "zamorax_logistics") : [...prev, "zamorax_logistics"])}
-                    className="mt-0.5 rounded"
+                    onChange={() => setShippingMethods(["zamorax_logistics"])}
+                    className="mt-0.5"
                   />
                   <div className="flex items-start gap-2">
                     <Package className="h-4 w-4 text-primary mt-0.5 shrink-0" />
@@ -480,11 +480,11 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
               {shippingConfig?.fbzEnabled && (
                 <label className="flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer hover:border-primary/40">
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="shippingMethod"
                     checked={shippingMethods.includes("fbz")}
-                    onChange={() => setShippingMethods(prev =>
-                      prev.includes("fbz") ? prev.filter(m => m !== "fbz") : [...prev, "fbz"])}
-                    className="mt-0.5 rounded"
+                    onChange={() => setShippingMethods(["fbz"])}
+                    className="mt-0.5"
                   />
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
