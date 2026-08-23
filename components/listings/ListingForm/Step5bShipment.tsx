@@ -95,12 +95,17 @@ export function Step5bShipment() {
       .finally(() => setLoading(false))
   }, [])
 
-  const toggle = (method: Method) => {
-    const next = selected.includes(method)
-      ? selected.filter(m => m !== method)
-      : [...selected, method]
-    // Always keep at least meetup if the result would be empty
-    setValue("shippingMethods", next.length > 0 ? next : ["meetup"], { shouldValidate: true })
+  // Single-select: picking a method replaces whatever was selected before,
+  // it never accumulates into a multi-method array. This matches how
+  // checkout actually treats shippingMethods — BuyNowModal/CartCheckoutModal
+  // pick exactly one method to charge and ship on, so letting a listing sit
+  // at e.g. ["meetup","fbz"] just meant checkout silently fell back to
+  // meetup any time FBZ wasn't available yet (not admin-activated), with no
+  // way to tell that was happening. Clicking the already-selected method
+  // deselects it back down to the meetup default rather than leaving the
+  // listing with zero methods chosen.
+  const select = (method: Method) => {
+    setValue("shippingMethods", selected[0] === method ? ["meetup"] : [method], { shouldValidate: true })
   }
 
   const isOn = (method: Method) => selected.includes(method)
@@ -123,8 +128,9 @@ export function Step5bShipment() {
       <div>
         <p className="text-sm font-semibold">Delivery Methods</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Choose how buyers can receive this item. You can offer multiple options.
-          Meet Up is selected by default if you don't choose.
+          Choose exactly one way buyers can receive this item. Selecting a new
+          method replaces your previous choice — Meet Up is used by default
+          if you don't pick one.
         </p>
       </div>
 
@@ -145,7 +151,7 @@ export function Step5bShipment() {
                 ? "border-emerald-500 bg-emerald-50"
                 : "border-border hover:border-emerald-300 bg-muted/20"
             )}
-            onClick={() => toggle("meetup")}
+            onClick={() => select("meetup")}
           >
             <div className="flex items-center gap-3 p-4">
               <div className={cn(
@@ -181,7 +187,7 @@ export function Step5bShipment() {
             {/* Header row — clicking toggles selection */}
             <div
               className="flex items-center gap-3 p-4 cursor-pointer"
-              onClick={() => toggle("zamorax_logistics")}
+              onClick={() => select("zamorax_logistics")}
             >
               <div className={cn(
                 "p-2 rounded-lg shrink-0",
@@ -250,7 +256,7 @@ export function Step5bShipment() {
             {/* Header row */}
             <div
               className="flex items-center gap-3 p-4 cursor-pointer"
-              onClick={() => toggle("fbz")}
+              onClick={() => select("fbz")}
             >
               <div className={cn(
                 "p-2 rounded-lg shrink-0",
