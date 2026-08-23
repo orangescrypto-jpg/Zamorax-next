@@ -59,6 +59,15 @@ export function ListingCard({ listing }: { listing: Listing }) {
     : null
   const flashCountdown  = useFlashCountdown(flashActive ? listing.flashDeal?.expiresAt : undefined)
 
+  // Standing discount — plain, permanent price cut. No countdown, never
+  // labeled "flash"/"discount" anywhere in the UI. Only applies when no
+  // flash deal is active (flash deal takes visual priority if both are
+  // somehow set on the same listing).
+  const standingDiscountActive = !flashActive && !!listing.standingDiscount?.discountPercent
+  const standingPrice = standingDiscountActive && listing.standingDiscount
+    ? ListingsService.getFlashPrice(listing.priceSale, listing.standingDiscount.discountPercent)
+    : null
+
   // Vacation mode
   const onVacation = listing.vacationMode === true
 
@@ -102,6 +111,12 @@ export function ListingCard({ listing }: { listing: Listing }) {
                   <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-sm shadow-sm flex items-center gap-0.5">
                     <Flame className="h-2.5 w-2.5" />
                     -{listing.flashDeal.discountPercent}%
+                  </span>
+                )}
+                {/* Plain price-cut pill — no "flash"/"discount" wording, no timer */}
+                {standingDiscountActive && listing.standingDiscount && (
+                  <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-sm shadow-sm">
+                    -{listing.standingDiscount.discountPercent}%
                   </span>
                 )}
                 {!flashActive && (
@@ -156,6 +171,15 @@ export function ListingCard({ listing }: { listing: Listing }) {
             <>
               <p className="text-base font-bold text-red-600 truncate">
                 {formatPrice(flashPrice)}
+              </p>
+              <p className="text-xs text-muted-foreground line-through">
+                {formatPrice(listing.priceSale)}
+              </p>
+            </>
+          ) : standingDiscountActive && standingPrice != null ? (
+            <>
+              <p className="text-base font-bold text-primary truncate">
+                {formatPrice(standingPrice)}
               </p>
               <p className="text-xs text-muted-foreground line-through">
                 {formatPrice(listing.priceSale)}
