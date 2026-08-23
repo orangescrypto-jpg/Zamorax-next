@@ -132,10 +132,23 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // FBZ Express is only offered when BOTH are true: admin has FBZ enabled
   // platform-wide (settings.fbzEnabled) AND this specific listing's stock
   // is actually verified at a Zamorax warehouse (listing.isFBZ, set only
-  // by admin FBZ intake). Buyer must actively pick it — default stays
-  // "meetup" either way, same as before.
+  // by admin FBZ intake).
   const fbzAvailable = !!settings.fbzEnabled && !!listing.isFBZ
-  const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">("meetup")
+  // FIX: delivery methods are single-select at the listing level now (a
+  // listing offers exactly one of meetup / ZamoraxLogic / FBZ — see
+  // Step5bShipment), but this modal always defaulted to "meetup"
+  // regardless of what the seller actually chose. On an FBZ-only listing
+  // that meant checkout still showed "You can also arrange meetup with
+  // the seller" and silently let the buyer complete an order via a
+  // delivery method the seller never offered. Default to whatever the
+  // listing's own shippingMethods actually say, falling back to "meetup"
+  // only when the listing doesn't specify (legacy rows).
+  const listingDefaultsToFbz = Array.isArray(listing.shippingMethods)
+    ? listing.shippingMethods.length === 1 && listing.shippingMethods[0] === "fbz"
+    : listing.shippingMethods === "fbz"
+  const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">(
+    fbzAvailable && listingDefaultsToFbz ? "fbz" : "meetup"
+  )
   const [fbzFee, setFbzFee] = useState(0)
 
   // FBZ Express fee — same zone-based LogisticsService pricing used across
@@ -557,7 +570,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       ))}
                     </select>
                   </div>
-                  {fbzAvailable && (
+                  {fbzAvailable && !listingDefaultsToFbz && (
                     <div className="space-y-1.5">
                       <Label className="text-xs">Delivery method</Label>
                       <div className="grid grid-cols-2 gap-2">
@@ -596,6 +609,20 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                           </p>
                         </button>
                       </div>
+                    </div>
+                  )}
+                  {/* FIX: when the listing is FBZ-only (single-select
+                      shippingMethods === ["fbz"]), there's no real choice
+                      to offer — showing the Standard/FBZ Express toggle
+                      implied meetup was available when the seller never
+                      offered it. Show a plain confirmation line instead. */}
+                  {fbzAvailable && listingDefaultsToFbz && (
+                    <div className="flex items-center gap-2 p-2.5 rounded-lg border-2 border-amber-500 bg-amber-50">
+                      <p className="text-xs font-semibold">FBZ Express</p>
+                      <span className="text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1">⚡</span>
+                      {listing.deliveryFeeOverrideKobo === 0 && (
+                        <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
+                      )}
                     </div>
                   )}
                   <div className="flex items-start gap-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
