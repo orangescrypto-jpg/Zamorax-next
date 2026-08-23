@@ -32,6 +32,7 @@ function rowToListing(row: Record<string, unknown>) {
     attributes:         parse(row.attributes)       ?? {},
     isHubVerified:      !!row.is_hub_verified,
     isFBZ:              !!row.is_fbz,
+    deliveryFeeOverrideKobo: row.delivery_fee_override_kobo != null ? Number(row.delivery_fee_override_kobo) : null,
     isActive:           row.status === "active",
     isBoosted:          !!row.is_boosted,
     isZamoraxPick:      !!row.is_zamorax_pick,
