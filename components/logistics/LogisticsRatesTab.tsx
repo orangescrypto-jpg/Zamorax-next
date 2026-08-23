@@ -15,12 +15,13 @@ import { invalidateSettingsCache } from "@/src/services/platformSettings"
 import { invalidatePlatformCache } from "@/hooks/usePlatformSettings"
 import { useToast } from "@/components/ui/use-toast"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { nigerianStates } from "@/constants/nigerianStates"
 import { Loader2, Truck, MapPin, Save, Plus, X } from "lucide-react"
 import {
-  SectionCard, ToggleRow, KoboField, NumField, InfoBox,
+  SectionCard, ToggleRow, KoboField,
 } from "@/components/admin/SettingsFields"
 
 // ─── Types (logistics-only slice of the global Settings shape) ──────────────
@@ -30,8 +31,7 @@ interface LogisticsSettings {
   newZlaRegistrationOpen: boolean
   showWeightOnListing: boolean
   zlaCoveredStates: string[]
-  zlaWeightThreshold: number
-  zlaWeightPerKgKobo: number
+  zlaWeightTiers: WeightTierUI[]
   zlaZonePrices: Record<string, number>
   zlaRouteOverrides: Record<string, number>
   zlaDoorstepFee: number
@@ -42,13 +42,27 @@ interface LogisticsSettings {
   zlaDoorstepBonusKobo: number
 }
 
+// Admin-editable weight band: any item weighing [minKg, maxKg) pays
+// priceKobo flat. maxKg === null means "and above" — the open-ended top
+// tier. Kept as a distinct UI type (maxKg nullable, no readonly) from the
+// service's WeightTier so this file doesn't need to import it just to
+// re-shape it for editing.
+interface WeightTierUI {
+  minKg: number
+  maxKg: number | null
+  priceKobo: number
+}
+
+const DEFAULT_WEIGHT_TIERS: WeightTierUI[] = [
+  { minKg: 0, maxKg: 5, priceKobo: 0 },
+]
+
 const DEFAULTS: LogisticsSettings = {
   logisticsEnabled: true,
   newZlaRegistrationOpen: true,
   showWeightOnListing: true,
   zlaCoveredStates: [],
-  zlaWeightThreshold: 2,
-  zlaWeightPerKgKobo: 100000,
+  zlaWeightTiers: DEFAULT_WEIGHT_TIERS,
   zlaZonePrices: {},
   zlaRouteOverrides: {},
   zlaDoorstepFee: 50000,
@@ -244,6 +258,94 @@ function AddRouteForm({ onAdd }: { onAdd: (from: string, to: string) => void }) 
   )
 }
 
+// ─── Weight Tiers Editor ──────────────────────────────────────────────────
+// Lets admin freely add/edit/delete weight-based price bands, e.g.
+// 0–5kg → ₦0, 5–10kg → ₦1,500, 10kg+ → ₦3,000. The last row's "up to"
+// field can be left blank to mean "and above" (open-ended top tier).
+// Changes apply the moment admin hits Save — every buyer-facing fee
+// calculation (BuyNowModal, CartCheckoutModal, for both FBZ and
+// ZamoraxLogic) reads through LogisticsService.calculateFee, so nothing
+// else needs touching.
+function WeightTiersEditor({
+  tiers, onChange,
+}: {
+  tiers: WeightTierUI[]
+  onChange: (v: WeightTierUI[]) => void
+}) {
+  const update = (index: number, patch: Partial<WeightTierUI>) => {
+    const next = tiers.map((t, i) => i === index ? { ...t, ...patch } : t)
+    onChange(next)
+  }
+
+  const remove = (index: number) => {
+    onChange(tiers.filter((_, i) => i !== index))
+  }
+
+  const addTier = () => {
+    // New band starts where the current highest band's "up to" left off
+    // (or 0 if every existing band is open-ended/empty), with no upper
+    // bound yet — admin fills that in.
+    const highestMax = tiers.reduce((max, t) => t.maxKg != null ? Math.max(max, t.maxKg) : max, 0)
+    onChange([...tiers, { minKg: highestMax, maxKg: null, priceKobo: 0 }])
+  }
+
+  return (
+    <div className="space-y-2">
+      {tiers.length === 0 && (
+        <p className="text-xs text-muted-foreground italic px-1">
+          No weight bands set — every order will be charged ₦0 for weight. Add at least one band.
+        </p>
+      )}
+      {tiers.map((tier, i) => (
+        <div key={i} className="flex flex-wrap items-end gap-2 p-2.5 rounded-lg border bg-muted/10">
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">From (kg)</label>
+            <Input
+              type="number" min={0} step={0.5}
+              value={tier.minKg}
+              onChange={e => update(i, { minKg: Number(e.target.value) })}
+              className="h-8 w-20 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">Up to (kg)</label>
+            <Input
+              type="number" min={0} step={0.5}
+              placeholder="and above"
+              value={tier.maxKg ?? ""}
+              onChange={e => update(i, { maxKg: e.target.value === "" ? null : Number(e.target.value) })}
+              className="h-8 w-24 text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-muted-foreground">Price</label>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">₦</span>
+              <Input
+                type="number" min={0} step={100}
+                value={tier.priceKobo / 100}
+                onChange={e => update(i, { priceKobo: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                className="h-8 w-24 text-xs"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md border text-muted-foreground hover:text-red-600 hover:border-red-200"
+            title="Delete this band"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="secondary" onClick={addTier}>
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add Weight Band
+      </Button>
+    </div>
+  )
+}
+
 // ─── Main Tab ─────────────────────────────────────────────────────────────
 
 export function LogisticsRatesTab() {
@@ -257,7 +359,22 @@ export function LogisticsRatesTab() {
       .then(r => r.json())
       .then(json => {
         if (json?.settings) {
-          setS(prev => ({ ...prev, ...pickLogisticsKeys(json.settings) }))
+          const picked = pickLogisticsKeys(json.settings)
+          // Back-compat: settings saved before weight tiers existed only
+          // have the old flat zlaWeightThreshold/zlaWeightPerKgKobo pair.
+          // Synthesize an equivalent 2-tier setup so the admin doesn't see
+          // their existing pricing silently reset to the bare default.
+          if (!Array.isArray((picked as any).zlaWeightTiers) || (picked as any).zlaWeightTiers.length === 0) {
+            const legacyThreshold = (json.settings as any).zlaWeightThreshold
+            const legacyPerKg     = (json.settings as any).zlaWeightPerKgKobo
+            if (legacyThreshold != null && legacyPerKg != null) {
+              picked.zlaWeightTiers = [
+                { minKg: 0, maxKg: legacyThreshold, priceKobo: 0 },
+                { minKg: legacyThreshold, maxKg: null, priceKobo: Math.round(legacyPerKg) },
+              ]
+            }
+          }
+          setS(prev => ({ ...prev, ...picked }))
         }
       })
       .catch(() => {})
@@ -266,7 +383,6 @@ export function LogisticsRatesTab() {
 
   const bool  = (key: keyof LogisticsSettings) => () => setS(p => ({ ...p, [key]: !p[key] } as LogisticsSettings))
   const kobo  = (key: keyof LogisticsSettings) => (v: number) => setS(p => ({ ...p, [key]: v }))
-  const num   = (key: keyof LogisticsSettings) => (v: number) => setS(p => ({ ...p, [key]: v }))
 
   // Preset routes + any custom ones the admin has added (present in saved
   // overrides but not in the preset list). Ordered presets-first so the
@@ -323,7 +439,7 @@ export function LogisticsRatesTab() {
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Zone Base Rates</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Covers 0–{s.zlaWeightThreshold}kg. Route overrides below take priority.
+              Base rate by route/zone before weight pricing is added. Route overrides below take priority.
               Keep these <strong>above</strong> ZamoraxLogic rates — the spread is your margin.
             </p>
           </div>
@@ -392,25 +508,20 @@ export function LogisticsRatesTab() {
 
         <Separator />
 
-        {/* ── Weight Surcharge ── */}
+        {/* ── Weight Pricing ── */}
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Weight Surcharge</p>
-          <NumField
-            label="Weight threshold"
-            desc="Items at or below this weight pay base rate only"
-            value={s.zlaWeightThreshold}
-            onChange={num("zlaWeightThreshold")}
-            suffix="kg" min={0.5} step={0.5}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Weight Pricing</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Set the delivery fee by weight band — e.g. 0–5kg pays ₦0, 5–10kg pays ₦1,500, 10kg and above pays ₦3,000.
+              Add, edit, or delete bands freely; the last band with no "up to" weight covers everything above it.
+              Applies to both FBZ and ZamoraxLogic checkout automatically.
+            </p>
+          </div>
+          <WeightTiersEditor
+            tiers={s.zlaWeightTiers ?? DEFAULT_WEIGHT_TIERS}
+            onChange={v => setS(p => ({ ...p, zlaWeightTiers: v }))}
           />
-          <KoboField
-            label="Surcharge per extra kg"
-            desc="Added for each kg above the threshold"
-            value={s.zlaWeightPerKgKobo}
-            onChange={kobo("zlaWeightPerKgKobo")}
-          />
-          <InfoBox color="blue">
-            Example: 3kg item, threshold {s.zlaWeightThreshold}kg → base + {s.zlaWeightThreshold < 3 ? 3 - s.zlaWeightThreshold : 1}kg × ₦{(s.zlaWeightPerKgKobo / 100).toLocaleString()} surcharge
-          </InfoBox>
         </div>
 
         <Separator />
@@ -450,7 +561,7 @@ export function LogisticsRatesTab() {
 function pickLogisticsKeys(full: Record<string, any>): Partial<LogisticsSettings> {
   const keys: (keyof LogisticsSettings)[] = [
     "logisticsEnabled", "newZlaRegistrationOpen", "showWeightOnListing",
-    "zlaCoveredStates", "zlaWeightThreshold", "zlaWeightPerKgKobo",
+    "zlaCoveredStates", "zlaWeightTiers",
     "zlaZonePrices", "zlaRouteOverrides", "zlaDoorstepFee", "zlaFragileFee",
     "zlaParcelReceivedKobo", "zlaParcelDispatchedKobo", "zlaParcelDeliveredKobo",
     "zlaDoorstepBonusKobo",
