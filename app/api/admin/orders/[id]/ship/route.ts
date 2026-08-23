@@ -3,11 +3,12 @@
 // already physically with Zamorax, so Zamorax staff — not the seller — will
 // handle it from here).
 //
-// GATED to official orders only:
+// GATED to orders Zamorax actually fulfills:
 //   - the listing was admin-picked for "Zamorax Direct" (listings.is_zamorax_pick), OR
-//   - the seller's account itself is official (users.is_official)
-// Any other order is rejected with 403 — for a regular (non-official) order,
-// only the seller can mark it shipped, same as today.
+//   - the seller's account itself is official (users.is_official), OR
+//   - the listing was activated for FBZ (listings.is_fbz), regardless of seller status
+// Any other order is rejected with 403 — for a regular (non-official,
+// non-FBZ) order, only the seller can mark it shipped, same as today.
 //
 // This route ONLY changes fulfillment tracking (fulfilled_by /
 // marked_shipped_by / marked_shipped_at) and the order status. It never
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const orderRes = await d1Query(
     `SELECT o.id, o.status, o.listing_id, o.seller_id, o.buyer_id, o.fulfilled_by,
             l.is_zamorax_pick AS listing_is_pick,
+            l.is_fbz          AS listing_is_fbz,
             u.is_official     AS seller_is_official
      FROM orders o
      LEFT JOIN listings l ON l.id = o.listing_id
@@ -47,10 +49,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 })
   }
 
-  const isOfficial = !!order.listing_is_pick || !!order.seller_is_official
-  if (!isOfficial) {
+  const isZamoraxFulfilled = !!order.listing_is_pick || !!order.seller_is_official || !!order.listing_is_fbz
+  if (!isZamoraxFulfilled) {
     return NextResponse.json(
-      { error: "This order isn't eligible. Only orders for official listings or official-seller accounts can be marked shipped by an admin/moderator." },
+      { error: "This order isn't eligible. Only orders for official listings, official-seller accounts, or FBZ-activated listings can be marked shipped by an admin/moderator." },
       { status: 403 },
     )
   }
