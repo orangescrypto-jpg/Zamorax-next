@@ -89,17 +89,6 @@ export function Hero() {
           </span>
         </div>
 
-        {/* Main headline */}
-        <div className="text-center md:text-left mb-6 max-w-2xl md:mx-0 mx-auto">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-white leading-[1.1] tracking-tight">
-            Buy, Sell & Rent, Deal Locally<br />
-            <span className="text-primary">Zero Wahala</span>
-          </h1>
-          <p className="mt-3 text-white/60 text-sm md:text-base max-w-md mx-auto md:mx-0">
-            Verified sellers. Secure escrow. Free inspection window.
-          </p>
-        </div>
-
         {/* Search card */}
         <form onSubmit={handleSearch} className="bg-white rounded-2xl shadow-2xl p-2 max-w-2xl mx-auto md:mx-0">
           <div className="flex flex-col sm:flex-row gap-2">
