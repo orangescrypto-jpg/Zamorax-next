@@ -45,6 +45,12 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
   // from `form` since it's an array, not a scalar field.
   const [shippingMethods, setShippingMethods] = useState<("meetup" | "zamorax_logistics" | "fbz")[]>(["meetup"])
   const [shippingConfig, setShippingConfig] = useState<ShippingMethodConfig | null>(null)
+  // FBZ ship-to-warehouse picker — only relevant once "fbz" is checked above
+  // and the listing doesn't already have FBZ stock activated (listing.isFBZ).
+  // Mirrors the create-listing flow's Step5bShipment fields.
+  const [fbzWarehouseId, setFbzWarehouseId] = useState("")
+  const [fbzQuantity, setFbzQuantity] = useState("")
+  const [fbzNotes, setFbzNotes] = useState("")
   // Bulk pricing tiers — naira values as strings while editing, same
   // pattern as priceSale/priceRentDaily above. Converted to kobo on save.
   const [bulkPricing, setBulkPricing] = useState<{ minQty: string; price: string }[]>([])
@@ -103,6 +109,21 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
       toast({ title: "Title and description are required", variant: "destructive" })
       return
     }
+    // If seller just checked FBZ on a listing that isn't already FBZ-active,
+    // a warehouse + quantity is required — same rule as the create-listing
+    // form (Step5bShipment) — so the shipment request can be filed.
+    const justAddingFbz = shippingMethods.includes("fbz") && !listing?.isFBZ
+    if (justAddingFbz) {
+      if (!fbzWarehouseId) {
+        toast({ title: "Select a warehouse to send your FBZ stock to", variant: "destructive" })
+        return
+      }
+      const qty = parseInt(fbzQuantity)
+      if (!qty || qty < 1) {
+        toast({ title: "Enter the quantity you'll send to the warehouse", variant: "destructive" })
+        return
+      }
+    }
     setSaving(true)
     try {
       await ListingsService.updateListing(id, {
@@ -136,11 +157,41 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         bulkPricing: bulkPricing
           .filter(t => t.minQty.trim() !== "" && t.price.trim() !== "")
           .map(t => ({ minQty: parseInt(t.minQty), price: Math.round(parseFloat(t.price) * 100) })),
-        status: "pending",
+        // FBZ listings need stock confirmed at the warehouse in addition to
+        // normal content review, so they hold at 'pending_fbz' instead of
+        // the usual 'pending' — see manage-listings PATCH 'approve'.
+        status: justAddingFbz ? "pending_fbz" : "pending",
       })
+
+      // File the ship-to-warehouse request alongside the edit, same as the
+      // create-listing flow — so the admin FBZ queue picks it up without
+      // the seller needing a separate trip to /dashboard/fbz.
+      if (justAddingFbz) {
+        const warehouse = shippingConfig?.fbzWarehouses.find(w => w.id === fbzWarehouseId)
+        await AdminService.addDoc("fbzShipments", {
+          sellerId:          user?.uid,
+          sellerName:        user?.fullName || user?.email || null,
+          sellerPhone:       (user as any)?.phone || null,
+          listingId:         id,
+          listingTitle:      form.title.trim(),
+          listingImage:      listing?.images?.[0] || null,
+          listingPrice:      Math.round(parseFloat(form.priceSale || "0") * 100),
+          quantity:          parseInt(fbzQuantity),
+          quantityAvailable: 0,
+          notes:             fbzNotes.trim() || null,
+          status:            "pending",
+          warehouseId:       fbzWarehouseId,
+          warehouseName:     warehouse?.name ?? null,
+          warehouseCity:     warehouse?.city ?? null,
+          warehouseState:    warehouse?.state ?? null,
+        })
+      }
+
       toast({
         title: "Listing updated!",
-        description: "It's now back in the review queue and won't show on the storefront (including any stock you just added) until an admin re-approves it.",
+        description: justAddingFbz
+          ? "Pending admin approval and FBZ stock confirmation. We'll notify you once your listing is live."
+          : "It's now back in the review queue and won't show on the storefront (including any stock you just added) until an admin re-approves it.",
         variant: "success",
       })
       router.push("/dashboard/seller/listings")
@@ -445,6 +496,67 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
                     </div>
                   </div>
                 </label>
+              )}
+
+              {/* Warehouse + quantity picker — only needed when FBZ was just
+                  checked and this listing doesn't already have FBZ stock
+                  activated. If it's already FBZ-active, no new shipment is
+                  needed here. */}
+              {shippingMethods.includes("fbz") && !listing?.isFBZ && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-3 ml-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Send stock to which warehouse?</Label>
+                    {(shippingConfig?.fbzWarehouses ?? []).filter(w => w.acceptingStock).length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">
+                        No warehouse is currently accepting stock — you can still save with FBZ
+                        checked, but ship-to-warehouse will need to wait until one opens.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(shippingConfig?.fbzWarehouses ?? []).filter(w => w.acceptingStock).map(w => (
+                          <div
+                            key={w.id}
+                            onClick={() => setFbzWarehouseId(w.id)}
+                            className={`flex items-center justify-between gap-2 text-xs rounded-lg px-2.5 py-2 border cursor-pointer ${
+                              fbzWarehouseId === w.id ? "border-amber-500 bg-amber-100/60" : "border-border bg-white hover:border-amber-300"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground truncate">{w.name}</p>
+                              <p className="text-muted-foreground">{w.city}, {w.state}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Quantity you'll send</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="e.g. 15"
+                      value={fbzQuantity}
+                      onChange={e => setFbzQuantity(e.target.value)}
+                      className="max-w-[160px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      No fixed minimum or maximum — admin confirms the actual count on arrival.
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Notes for warehouse team (optional)</Label>
+                    <Input
+                      placeholder="e.g. All items are sealed, accessories included..."
+                      value={fbzNotes}
+                      onChange={e => setFbzNotes(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    This listing won't go live until admin confirms your stock has arrived and
+                    activates it — this is in addition to the normal listing review.
+                  </p>
+                </div>
               )}
             </div>
           </div>
