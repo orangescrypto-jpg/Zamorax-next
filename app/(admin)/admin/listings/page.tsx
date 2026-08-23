@@ -349,7 +349,7 @@ export default function AdminListingsPage() {
                       )}
                     </Button>
                   )}
-                  {listing.status === "active" && listing.isFBZ && (
+                  {listing.status === "active" && (listing.isFBZ || listing.isZamoraxPick) && (
                     <Button
                       size="sm"
                       variant={listing.deliveryFeeOverrideKobo === 0 ? "secondary" : "outline"}
