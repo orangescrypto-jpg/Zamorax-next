@@ -552,6 +552,14 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       Your payment is held in <strong>escrow</strong> and only released to the seller after you confirm receipt. You are fully protected.
                     </p>
                   </div>
+                  {!!listing.estimatedDeliveryDays && (
+                    <div className="flex items-start gap-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
+                      <Truck className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-blue-700">
+                        Estimated delivery: <strong>{listing.estimatedDeliveryDays}</strong>. Not shipped within that window? Contact support for a full refund.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
