@@ -110,9 +110,26 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const now = new Date().toISOString()
 
     if (action === "approve") {
+      // FBZ listings need a second gate — stock must be received and
+      // activated at the warehouse (see /api/fbz/shipments/[id]/activate)
+      // before the listing can go live, in addition to this normal content
+      // review. If this listing was created with FBZ chosen and stock
+      // hasn't been activated yet, approving here only clears the content
+      // side and holds it at 'pending_fbz_stock' instead of going straight
+      // to 'active'. A non-FBZ listing (or one whose stock is already
+      // activated) goes straight to 'active' as before.
+      const current = await d1Query(
+        "SELECT status, is_fbz FROM listings WHERE id = ? LIMIT 1",
+        [id], nativeDB,
+      )
+      const row = (current as any)?.results?.[0]
+      const isFbzPending = row?.status === "pending_fbz"
+      const stockAlreadyActivated = !!row?.is_fbz
+
+      const nextStatus = (isFbzPending && !stockAlreadyActivated) ? "pending_fbz_stock" : "active"
       await d1Query(
-        "UPDATE listings SET status = 'active', updated_at = ? WHERE id = ?",
-        [now, id], nativeDB,
+        "UPDATE listings SET status = ?, updated_at = ? WHERE id = ?",
+        [nextStatus, now, id], nativeDB,
       )
     } else if (action === "reject") {
       await d1Query(
