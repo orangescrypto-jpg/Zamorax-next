@@ -56,7 +56,12 @@ function mapRow(row: Record<string, unknown>): Listing {
     deliveryNationwide:  !!row.delivery_nationwide,
     weightKg:            row.weight_kg               ? Number(row.weight_kg)               : undefined,
     isFragile:           row.is_fragile              ? !!row.is_fragile                    : undefined,
-    shippingMethods:     parse(row.delivery_options  ?? row.shipping_methods) ?? undefined,
+    shippingMethods:     (() => {
+                            const v = parse(row.delivery_options ?? row.shipping_methods)
+                            if (Array.isArray(v)) return v
+                            if (typeof v === "string" && v) return [v]
+                            return undefined
+                          })(),
     estimatedDeliveryDays: row.estimated_delivery_days ? String(row.estimated_delivery_days) : undefined,
     stockQty:            row.stock_qty != null       ? Number(row.stock_qty)               : undefined,
     views:               Number(row.views            ?? 0),
