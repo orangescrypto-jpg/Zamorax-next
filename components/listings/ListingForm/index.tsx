@@ -2,6 +2,7 @@
 
 import { AdminService, limit, serverTimestamp } from "@/src/services"
 import { getPlatformSettings } from "@/src/services/platformSettings"
+import { ShippingService } from "@/src/services/shipping"
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { useForm, FormProvider } from "react-hook-form"
@@ -134,7 +135,7 @@ export function ListingForm() {
       3: [],
       4: ["images"],
       5: ["nigerianState", "city"],
-      6: ["shippingMethods"],
+      6: ["shippingMethods", "fbzWarehouseId", "fbzQuantity"],
       [boostStepNum]: ["boostType"],
       [reviewStepNum]: ["acceptTerms"],
     }
@@ -185,6 +186,7 @@ export function ListingForm() {
       const shippingMethods = (data.shippingMethods && data.shippingMethods.length > 0)
         ? data.shippingMethods
         : ["meetup"]
+      const isFbzChosen = shippingMethods.includes("fbz")
 
       // Used/graded items (grade_a, grade_b, open_box) are implicitly
       // one-of-a-kind unless the seller explicitly says otherwise — a
@@ -241,7 +243,7 @@ export function ListingForm() {
         coupon_enabled:       (couponsOn && data.couponEnabled) ? 1 : 0,
         coupon_code:          (couponsOn && data.couponEnabled && data.couponCode) ? data.couponCode.toUpperCase() : null,
         coupon_discount_percent: (couponsOn && data.couponEnabled) ? (data.couponDiscountPercent ?? null) : null,
-        status:               "pending",
+        status:               isFbzChosen ? "pending_fbz" : "pending",
         views:                0,
         saves:                0,
         inquiries:            0,
@@ -250,7 +252,42 @@ export function ListingForm() {
         vacation_mode:        0,
       })
 
-      toast({ title: "Listing Submitted!", description: "Pending admin approval. We'll notify you shortly.", variant: "success" })
+      // If seller chose FBZ, create the ship-to-warehouse request in the same
+      // step — linked to this listing so admin's "receive → activate" flow
+      // (see app/(admin)/admin/fbz) can find it. This listing stays hidden
+      // from buyers (status: pending_fbz) until BOTH normal content review
+      // AND FBZ stock activation are done — see app/api/admin/manage-listings.
+      if (isFbzChosen) {
+        const shippingConfig = await ShippingService.getConfig()
+        const warehouse = shippingConfig.fbzWarehouses.find(w => w.id === data.fbzWarehouseId)
+        await AdminService.addDoc("fbzShipments", {
+          sellerId:          user.uid,
+          sellerName:        user.fullName || user.email || null,
+          sellerPhone:       user.phone || null,
+          listingId:         listingId,
+          listingTitle:      data.title,
+          listingImage:      data.images?.[0] || null,
+          listingPrice:      priceSaleKobo,
+          quantity:          data.fbzQuantity,
+          quantityAvailable: 0,
+          notes:             data.fbzNotes?.trim() || null,
+          status:            "pending",
+          warehouseId:       data.fbzWarehouseId,
+          warehouseName:     warehouse?.name ?? null,
+          warehouseAddress:  null, // not exposed on FBZWarehouseAvailability; admin sees full warehouse row via warehouseId join in /admin/fbz
+          warehousePhone:    null,
+          warehouseCity:     warehouse?.city ?? null,
+          warehouseState:    warehouse?.state ?? null,
+        })
+      }
+
+      toast({
+        title: "Listing Submitted!",
+        description: isFbzChosen
+          ? "Pending admin approval and FBZ stock confirmation. We'll notify you once your listing is live."
+          : "Pending admin approval. We'll notify you shortly.",
+        variant: "success",
+      })
       form.reset()
       setStep(1)
       clearListingDraft()
