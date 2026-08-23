@@ -1,6 +1,6 @@
 "use client"
 
-import { AdminService, ListingsService } from "@/src/services"
+import { AdminService, ListingsService, where } from "@/src/services"
 import { useEffect, useState, use } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { useRouter } from "next/navigation"
@@ -126,6 +126,24 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     }
     setSaving(true)
     try {
+      // A listing already has an FBZ shipment on file once it's been
+      // through this flow before (pending intake, received-at-warehouse,
+      // or already live) — re-filing on every edit was creating a second
+      // fbzShipments row (and, once activated, a second "copy" of the
+      // stock/listing) each time the seller saved changes. Look for any
+      // existing non-terminal shipment tied to this listing first; only
+      // file a brand-new one if none exists.
+      let existingShipment: any = null
+      if (justAddingFbz) {
+        const rows = await AdminService.getCollection("fbzShipments", [
+          where("listingId", "==", id),
+        ])
+        existingShipment = (rows as any[])
+          .filter(r => !["rejected"].includes(r.status))
+          .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())[0]
+          ?? null
+      }
+
       await ListingsService.updateListing(id, {
         title: form.title.trim(),
         description: form.description.trim(),
@@ -165,10 +183,13 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
 
       // File the ship-to-warehouse request alongside the edit, same as the
       // create-listing flow — so the admin FBZ queue picks it up without
-      // the seller needing a separate trip to /dashboard/fbz.
+      // the seller needing a separate trip to /dashboard/fbz. If a shipment
+      // already exists for this listing (pending, received, or active),
+      // update it in place instead of filing a duplicate — one listing
+      // should only ever have one shipment record.
       if (justAddingFbz) {
         const warehouse = shippingConfig?.fbzWarehouses.find(w => w.id === fbzWarehouseId)
-        await AdminService.addDoc("fbzShipments", {
+        const payload = {
           sellerId:          user?.uid,
           sellerName:        user?.fullName || user?.email || null,
           sellerPhone:       (user as any)?.phone || null,
@@ -177,14 +198,27 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
           listingImage:      listing?.images?.[0] || null,
           listingPrice:      Math.round(parseFloat(form.priceSale || "0") * 100),
           quantity:          parseInt(fbzQuantity),
-          quantityAvailable: 0,
           notes:             fbzNotes.trim() || null,
-          status:            "pending",
           warehouseId:       fbzWarehouseId,
           warehouseName:     warehouse?.name ?? null,
           warehouseCity:     warehouse?.city ?? null,
           warehouseState:    warehouse?.state ?? null,
-        })
+        }
+        if (existingShipment) {
+          // Re-submitting resets it back into the intake queue for a fresh
+          // admin check, rather than silently keeping stale inspection data.
+          await AdminService.updateDoc("fbzShipments", existingShipment.id, {
+            ...payload,
+            status: "pending",
+            quantityAvailable: 0,
+          })
+        } else {
+          await AdminService.addDoc("fbzShipments", {
+            ...payload,
+            quantityAvailable: 0,
+            status: "pending",
+          })
+        }
       }
 
       toast({
