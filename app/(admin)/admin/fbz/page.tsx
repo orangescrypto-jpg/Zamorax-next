@@ -108,35 +108,21 @@ export default function AdminFBZPage() {
         activatedAt: serverTimestamp(),
       })
 
-      // Previously this only flipped status to 'active' when content review
-      // had already separately approved the listing (status held at
-      // 'pending_fbz_stock') — an admin still stuck at 'pending_fbz' had to
-      // make a second trip to /admin/listings and hit Approve there before
-      // this activation would actually take effect, even though physically
-      // inspecting and confirming the stock here is itself a legitimate
-      // final checkpoint. Activating FBZ stock now always takes the listing
-      // live in one action — there's no longer a separate approval step to
-      // remember for FBZ listings specifically.
-      //
-      // The FBZ badge itself (is_fbz) is only turned on for non-official
-      // sellers — an official seller's listing already carries the
-      // Zamorax Direct badge, so a second "Fulfilled by Zamorax" badge
-      // would be redundant. fulfilled_by still goes to "zamorax" either
-      // way, since Zamorax genuinely holds and ships this stock regardless
-      // of the seller's official status.
-      //
-      // Split into two updates: the FBZ metadata (isFBZ / fbzQuantity /
-      // fbzShipmentId / fulfilledBy) and the status flip. Previously these
-      // were one UPDATE — if any single column in it ever failed (as
-      // happened with the is_f_b_z bug), the whole statement rolled back
-      // and status silently never reached 'active', even though the toast
-      // said "FBZ Activated!". Splitting means a problem with one field
-      // can't block the other, and the status flip — the one thing that
-      // actually controls public visibility — always gets its own
-      // dedicated write and its own error surface.
+      // FIX: is_fbz used to be set only for non-official sellers (an
+      // official seller's listing already carries the Zamorax Direct
+      // badge, so a second "Fulfilled by Zamorax" badge seemed redundant
+      // there). But checkout's FBZ Express delivery option is gated on
+      // this exact flag (see BuyNowModal/CartCheckoutModal) — an official
+      // seller whose stock genuinely went through warehouse intake and
+      // activation here still needs is_fbz = 1, or the FBZ delivery method
+      // never becomes available to buyers regardless of how many times
+      // admin "activates" it. is_fbz now always turns on here; any
+      // redundant-badge concern for official sellers is a display-only
+      // question (suppress the duplicate badge in the UI), not something
+      // that should ever gate real delivery eligibility.
       const goingLive = intakeListing?.status !== "active" && intakeListing?.status !== "rejected"
       await AdminService.updateDoc("listings", intakeShipment.listingId, {
-        isFBZ: intakeSellerOfficial === false,
+        isFBZ: true,
         fbzQuantity: qty,
         fbzShipmentId: intakeShipment.id,
         fulfilledBy: "zamorax",
