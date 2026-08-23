@@ -165,6 +165,23 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz" | "zamorax_logistics">(
     fbzAvailable && listingDefaultsToFbz ? "fbz" : "meetup"
   )
+  // FIX: fbzAvailable/zlaCovered resolve asynchronously (ShippingService
+  // config + coverage lookups both fire in effects after mount), so the
+  // useState initializer above only ever saw their instant, mostly-false
+  // starting values — a seller who chose FBZ or ZLA on a listing with more
+  // than one method still ended up defaulted to "meetup" as soon as those
+  // effects resolved and it happened to come first. Once we know a
+  // non-meetup method the seller offered is actually usable, prefer it —
+  // but only while the buyer hasn't manually picked something themselves.
+  const [methodAutoSet, setMethodAutoSet] = useState(true)
+  useEffect(() => {
+    if (!methodAutoSet) return
+    if (fbzAvailable) {
+      setDeliveryMethod("fbz")
+    } else if (zlaOffered && zlaAvailable && zlaCovered) {
+      setDeliveryMethod("zamorax_logistics")
+    }
+  }, [methodAutoSet, fbzAvailable, zlaOffered, zlaAvailable, zlaCovered])
   const [fbzFee, setFbzFee] = useState(0)
 
   // ZLA fee + coverage — same zone-based LogisticsService pricing engine
@@ -266,7 +283,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   const sellerDisplayName =
     seller?.storeName || seller?.fullName || listing.sellerName || "Seller"
 
-  const addressValid = street.trim() && city.trim() && state
+  const addressValid = street.trim() && city.trim() && state && !(listingDefaultsToFbz && !fbzAvailable)
 
   const handlePlaceOrder = async () => {
     if (!user?.uid || !user?.email) {
@@ -622,7 +639,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => setDeliveryMethod("meetup")}
+                          onClick={() => { setMethodAutoSet(false); setDeliveryMethod("meetup") }}
                           className={`text-left p-2.5 rounded-lg border-2 transition-all ${
                             deliveryMethod === "meetup"
                               ? "border-primary bg-primary/5"
@@ -635,7 +652,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                         {fbzAvailable && (
                           <button
                             type="button"
-                            onClick={() => setDeliveryMethod("fbz")}
+                            onClick={() => { setMethodAutoSet(false); setDeliveryMethod("fbz") }}
                             className={`text-left p-2.5 rounded-lg border-2 transition-all ${
                               deliveryMethod === "fbz"
                                 ? "border-amber-500 bg-amber-50"
@@ -659,7 +676,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                         {!fbzAvailable && zlaOffered && zlaAvailable && state && zlaCovered && (
                           <button
                             type="button"
-                            onClick={() => setDeliveryMethod("zamorax_logistics")}
+                            onClick={() => { setMethodAutoSet(false); setDeliveryMethod("zamorax_logistics") }}
                             className={`text-left p-2.5 rounded-lg border-2 transition-all ${
                               deliveryMethod === "zamorax_logistics"
                                 ? "border-primary bg-primary/5"
@@ -694,6 +711,20 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       {listing.deliveryFeeOverrideKobo === 0 && (
                         <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
                       )}
+                    </div>
+                  )}
+                  {/* Seller picked FBZ as their only shipping method, but
+                      this stock hasn't been admin-activated at a warehouse
+                      yet (listing.isFBZ still false) — there's genuinely no
+                      delivery method to offer. Surface why instead of
+                      silently letting the buyer proceed on an implicit
+                      "meetup" the seller never agreed to. */}
+                  {!fbzAvailable && listingDefaultsToFbz && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg border border-amber-200 bg-amber-50">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-amber-800">
+                        This seller selected FBZ Express for this item, but the stock hasn't been confirmed at a Zamorax warehouse yet. Please check back shortly, or contact the seller directly.
+                      </p>
                     </div>
                   )}
                   <div className="flex items-start gap-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
