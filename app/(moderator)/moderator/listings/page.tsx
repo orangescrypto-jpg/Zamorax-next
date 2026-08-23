@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { formatPrice } from "@/lib/utils"
-import { CheckCircle, XCircle, Loader2, Package, ExternalLink, Eye } from "lucide-react"
+import { CheckCircle, XCircle, Loader2, Package, ExternalLink, Eye, Pencil } from "lucide-react"
 import Link from "next/link"
 import {DocumentData} from "@/src/services"
 
@@ -105,6 +105,9 @@ export default function ModeratorListingsPage() {
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="ghost" size="sm" asChild>
             <Link href={`/listings/${listing.id}`} target="_blank"><ExternalLink className="h-4 w-4" /></Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href={`/dashboard/seller/listings/${listing.id}/edit`}><Pencil className="h-4 w-4" /></Link>
           </Button>
           {tab === "pending" && (
             <>
