@@ -404,6 +404,14 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                   const items        = grouped[sellerId]
                   const sellerName   = items[0].sellerName
                   const methods      = items[0].shippingMethods ?? ["meetup"]
+                  // FBZ Express is only offered when EVERY item in this
+                  // seller's group is individually FBZ-verified (real stock
+                  // held at a Zamorax warehouse, per listing.isFBZ set only
+                  // by admin FBZ intake) — not derived from shippingMethods,
+                  // which just reflects what the seller opted into and says
+                  // nothing about where the stock physically sits. A mixed
+                  // cart (some FBZ, some not) can't ship as one FBZ parcel.
+                  const allItemsFBZ  = items.every(i => i.isFBZ)
                   const zlaCovered   = sellerZlaCoverage[sellerId] ?? false
                   const zlaFee       = sellerZlaFees[sellerId] ?? 0
                   const coverLoading = coverageLoading[sellerId] ?? false
@@ -446,10 +454,10 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                             <p className="text-[10px] text-muted-foreground italic px-1">ZLA logistics not available for this route</p>
                           )
                         )}
-                        {methods.includes("fbz") && (settings.fbzCoveredStates?.length ?? 0) > 0 && (
+                        {allItemsFBZ && settings.fbzEnabled && (settings.fbzCoveredStates?.length ?? 0) > 0 && (
                           <DeliveryOption
                             label="Fulfilled by Zamorax"
-                            desc="Handled from our warehouse"
+                            desc="Handled from our warehouse — ships nationwide"
                             fee={0}
                             selected={selected?.method === "fbz"}
                             onSelect={() => setDeliverySelections(prev => ({ ...prev, [sellerId]: { method: "fbz", fee: 0 } }))}
