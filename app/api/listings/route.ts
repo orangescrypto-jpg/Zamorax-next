@@ -69,6 +69,9 @@ function rowToListing(row: Record<string, unknown>) {
     coupon:             row.coupon_enabled && row.coupon_code
       ? { code: String(row.coupon_code), discountPercent: Number(row.coupon_discount_percent ?? 0) }
       : null,
+    standingDiscount:   row.standing_discount_enabled && row.standing_discount_percent
+      ? { discountPercent: Number(row.standing_discount_percent ?? 0) }
+      : null,
     vacationMode:       row.vacation_mode           ? !!row.vacation_mode          : undefined,
     vacationReturnDate: row.vacation_return_date    ? String(row.vacation_return_date) : undefined,
     createdAt:          String(row.created_at       ?? new Date().toISOString()),
