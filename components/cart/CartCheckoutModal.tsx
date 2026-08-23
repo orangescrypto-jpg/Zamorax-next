@@ -95,6 +95,13 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
   const [sellerZlaCoverage,  setSellerZlaCoverage]  = useState<Record<string, boolean>>({})
   const [sellerZlaFees,      setSellerZlaFees]      = useState<Record<string, number>>({})
   const [sellerFbzFees,      setSellerFbzFees]      = useState<Record<string, number>>({})
+  // Buyer's doorstep-vs-pickup choice, per seller group. true = deliver to
+  // buyer's address (adds the doorstep fee on top of the base zone/route
+  // rate), false = buyer collects from a pickup station (base rate only).
+  // Defaults to true so existing checkout behavior doesn't silently change
+  // for groups where the buyer never touches the new toggle.
+  const [sellerDoorstep,     setSellerDoorstep]     = useState<Record<string, boolean>>({})
+  const isDoorstepFor = (sellerId: string) => sellerDoorstep[sellerId] ?? true
 
   const grouped   = getCartGrouped()
   const sellerIds = Object.keys(grouped)
@@ -125,7 +132,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
             const totalWeight  = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
             const hasFragile   = items.some(i => i.isFragile)
             const pricing      = await LogisticsService.getPricing()
-            const feeBreakdown = LogisticsService.calculateFee(sellerState, state, pricing, { weightKg: totalWeight, isFragile: hasFragile })
+            const feeBreakdown = LogisticsService.calculateFee(sellerState, state, pricing, { weightKg: totalWeight, isFragile: hasFragile, isDoorstep: isDoorstepFor(sellerId) })
             const fee: number  = feeBreakdown.total
             setSellerZlaFees(prev => ({ ...prev, [sellerId]: fee }))
           }
@@ -137,7 +144,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, step])
+  }, [state, step, sellerDoorstep])
 
   // FBZ Express fee — same zone-based LogisticsService pricing engine as
   // ZLA above, but "from" is the state of the nearest active FBZ warehouse
@@ -168,8 +175,10 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
         const warehouse   = active.find(w => w.state === state) ?? active[0]
         const totalWeight = items.reduce((sum, i) => sum + ((i.weightKg ?? 0.5) * i.quantity), 0)
         const hasFragile  = items.some(i => i.isFragile)
-        const pricing      = await LogisticsService.getPricing()
-        const feeBreakdown = LogisticsService.calculateFee(warehouse.state, state, pricing, { weightKg: totalWeight, isFragile: hasFragile })
+        // FBZ now uses its own independent rate table (getFbzDeliveryFee),
+        // not ZLA's — priced from the WAREHOUSE's state to the buyer's
+        // state, never the seller's own state.
+        const feeBreakdown = await LogisticsService.getFbzDeliveryFee(warehouse.state, state, { weightKg: totalWeight, isFragile: hasFragile, isDoorstep: isDoorstepFor(sellerId) })
         setSellerFbzFees(prev => ({ ...prev, [sellerId]: feeBreakdown.total }))
       } catch {
         // Leave fee unset — DeliveryOption below falls back to 0 rather
@@ -177,7 +186,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, step])
+  }, [state, step, sellerDoorstep])
 
   // Auto-select a sensible default delivery method per seller group.
   // FIX: this always defaulted every group to "meetup" regardless of
@@ -217,6 +226,31 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, grouped, sellerFbzFees, sellerZlaFees, sellerZlaCoverage])
+
+  // Keep an already-selected group's stored fee in sync with the live fee
+  // whenever it changes — e.g. the buyer toggles doorstep/pickup for a
+  // group after already selecting FBZ/ZLA as its method. Without this,
+  // deliverySelections[sellerId].fee stays frozen at whatever it was the
+  // moment the method was picked, so Review/Pay would silently undercharge
+  // or overcharge relative to the toggle actually selected.
+  useEffect(() => {
+    setDeliverySelections(prev => {
+      let changed = false
+      const next = { ...prev }
+      for (const sellerId of Object.keys(prev)) {
+        const sel = prev[sellerId]
+        const liveFee =
+          sel.method === "fbz" ? sellerFbzFees[sellerId]
+          : sel.method === "zamorax_logistics" ? sellerZlaFees[sellerId]
+          : undefined
+        if (liveFee != null && liveFee !== sel.fee) {
+          next[sellerId] = { ...sel, fee: liveFee }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [sellerFbzFees, sellerZlaFees])
 
   const handleStep1Next = () => {
     if (!street.trim() || !city.trim() || !state || !lga.trim()) {
@@ -294,6 +328,8 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
           })),
           deliveryMethod: delivery.method,
           deliveryFee:    delivery.fee,
+          isDoorstepDelivery: (delivery.method === "fbz" || delivery.method === "zamorax_logistics")
+            ? isDoorstepFor(sellerId) : null,
           subtotal,
           platformFee,
           sellerPayout,
@@ -550,20 +586,62 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                         )}
                       </div>
 
-                      {/* Door delivery fee/timing — only when ZamoraxLogic or FBZ
-                          is the SELECTED method (not just offered). No pickup
-                          station shown: buyers only learn that location by
-                          phone once goods arrive in their state. */}
+                      {/* Doorstep vs pickup — buyer's actual choice per
+                          seller group. Only shown when a live-computed fee
+                          applies (not a flat per-item override, which is a
+                          single fixed price regardless of doorstep/pickup). */}
+                      {(selected?.method === "zamorax_logistics" || selected?.method === "fbz")
+                        && !items.every(i => i.deliveryFeeOverrideKobo != null) && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Doorstep or pickup?</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSellerDoorstep(prev => ({ ...prev, [sellerId]: true }))}
+                              className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                                isDoorstepFor(sellerId)
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:border-primary/40"
+                              }`}
+                            >
+                              <p className="text-xs font-semibold">Door Delivery</p>
+                              <p className="text-[10px] text-muted-foreground">Delivered to your address</p>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSellerDoorstep(prev => ({ ...prev, [sellerId]: false }))}
+                              className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                                !isDoorstepFor(sellerId)
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:border-primary/40"
+                              }`}
+                            >
+                              <p className="text-xs font-semibold">Pickup Station</p>
+                              <p className="text-[10px] text-muted-foreground">Cheaper — collect it yourself</p>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Delivery fee — reflects the buyer's doorstep/pickup
+                          choice above (or the group's flat override, when
+                          every item has one). SELECTED method only. */}
                       {(selected?.method === "zamorax_logistics" || selected?.method === "fbz") && (
                         <div className="rounded-lg border border-border bg-background p-2.5 space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-foreground">Door Delivery</span>
+                            <span className="text-xs font-semibold text-foreground">
+                              {items.every(i => i.deliveryFeeOverrideKobo != null)
+                                ? "Delivery Fee"
+                                : isDoorstepFor(sellerId) ? "Door Delivery" : "Pickup Station"}
+                            </span>
                             <span className="text-xs font-semibold">
                               {selected.fee > 0 ? formatPrice(selected.fee) : "Free"}
                             </span>
                           </div>
                           <p className="text-[10px] text-muted-foreground">
-                            Delivered to your address. We'll call you once it arrives in your state.
+                            {items.every(i => i.deliveryFeeOverrideKobo != null) || isDoorstepFor(sellerId)
+                              ? "Delivered to your address. We'll call you once it arrives in your state."
+                              : "Collect from the nearest pickup station in your state once it arrives — we'll call you."}
                           </p>
                         </div>
                       )}
