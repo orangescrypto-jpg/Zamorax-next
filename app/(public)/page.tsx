@@ -7,6 +7,7 @@
 
 import { Hero }               from "@/components/home/Hero"
 import { HeaderBanner }        from "@/components/shared/HeaderBanner"
+import { HeaderBannerSlider }  from "@/components/shared/HeaderBannerSlider"
 import { TrustBar }           from "@/components/home/TrustBar"
 import { CategoryGrid }       from "@/components/home/CategoryGrid"
 import { HowItWorks }         from "@/components/home/HowItWorks"
@@ -42,6 +43,11 @@ export default function HomePage() {
     <>
       {/* 0 — Site-wide header promo/CTA strip, admin-managed, renders nothing if empty */}
       <HeaderBanner />
+
+      {/* 0.5 — Large rotating header slider (Jumia-style), admin-managed,
+          separate placement from the strip above — renders nothing if no
+          slides are active */}
+      <HeaderBannerSlider />
 
       {/* 1 — Hero + search */}
       {settings.homepageHeroBannerEnabled && <Hero />}
