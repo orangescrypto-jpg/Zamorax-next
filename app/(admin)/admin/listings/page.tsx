@@ -12,6 +12,7 @@
 // DELETE to remove) — it just never had a page wired up to it.
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { adminFetch } from "@/lib/admin-fetch"
 import { useToast } from "@/components/ui/use-toast"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,7 +29,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
   Loader2, CheckCircle2, XCircle, Trash2, Zap, ZapOff,
-  Search, RefreshCw, Package, ChevronLeft, ChevronRight, ShieldCheck, Truck,
+  Search, RefreshCw, Package, ChevronLeft, ChevronRight, ShieldCheck, Truck, Pencil,
 } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
 import Image from "next/image"
@@ -266,6 +267,11 @@ export default function AdminListingsPage() {
                 </div>
 
                 <div className="flex flex-row flex-wrap sm:flex-col gap-1.5 sm:flex-shrink-0 sm:w-auto">
+                  <Button size="sm" variant="outline" className="h-7 text-xs" asChild>
+                    <Link href={`/dashboard/seller/listings/${listing.id}/edit`}>
+                      <Pencil className="h-3 w-3 mr-1" />Edit
+                    </Link>
+                  </Button>
                   {listing.status === "pending" && (
                     <>
                       <Button
