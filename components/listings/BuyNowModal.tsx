@@ -52,6 +52,7 @@ interface Props {
     sellerStoreName?: string
     nigerianState?: string
     estimatedDeliveryDays?: string
+    isFBZ?: boolean
   }
   // Quantity the buyer selected on the listing page (bulk-pricing tiles or
   // the +/- stepper). listing.priceSale is treated as the PER-UNIT price
@@ -124,6 +125,14 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   const [city,   setCity]   = useState("")
   const [state,  setState]  = useState("")
   const [lga,    setLga]    = useState("")
+
+  // FBZ Express is only offered when BOTH are true: admin has FBZ enabled
+  // platform-wide (settings.fbzEnabled) AND this specific listing's stock
+  // is actually verified at a Zamorax warehouse (listing.isFBZ, set only
+  // by admin FBZ intake). Buyer must actively pick it — default stays
+  // "meetup" either way, same as before.
+  const fbzAvailable = !!settings.fbzEnabled && !!listing.isFBZ
+  const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">("meetup")
 
   // Single last-used address, auto-overwritten on each successful order.
   // Prefills the address step so returning buyers don't re-type it, but
@@ -207,7 +216,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
               deliveryCity:    city.trim(),
               deliveryState:   state,
               deliveryLGA:     lga.trim(),
-              deliveryMethod:  "meetup",
+              deliveryMethod:  deliveryMethod,
               sellerState:     listing.nigerianState ?? "",
               buyerState:      state,
               itemPrice:       itemPriceKobo,
@@ -284,7 +293,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           deliveryCity:    city.trim(),
           deliveryState:   state,
           deliveryLGA:     lga.trim(),
-          deliveryMethod:  "meetup",
+          deliveryMethod:  deliveryMethod,
           sellerState:     listing.nigerianState,
           buyerState:      state,
           itemPrice:       itemPriceKobo,
@@ -504,10 +513,46 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       ))}
                     </select>
                   </div>
+                  {fbzAvailable && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Delivery method</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryMethod("meetup")}
+                          className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                            deliveryMethod === "meetup"
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <p className="text-xs font-semibold">Standard</p>
+                          <p className="text-[10px] text-muted-foreground">Arrange with seller</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryMethod("fbz")}
+                          className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                            deliveryMethod === "fbz"
+                              ? "border-amber-500 bg-amber-50"
+                              : "border-amber-200 bg-amber-50/50 hover:border-amber-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs font-semibold">FBZ Express</p>
+                            <span className="text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1">⚡</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground">Shipped from Zamorax warehouse</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-start gap-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
                     <AlertCircle className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                     <p className="text-[11px] text-blue-700">
-                      You can also arrange <strong>meetup</strong> with the seller after placing your order.
+                      {deliveryMethod === "fbz"
+                        ? "Ships nationwide from our warehouse — no need to coordinate with the seller."
+                        : <>You can also arrange <strong>meetup</strong> with the seller after placing your order.</>}
                     </p>
                   </div>
                 </div>
@@ -539,7 +584,9 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       </div>
                     )}
                     <div className="flex justify-between px-3 py-2">
-                      <span className="text-muted-foreground text-xs">Delivery (meetup)</span>
+                      <span className="text-muted-foreground text-xs">
+                        Delivery ({deliveryMethod === "fbz" ? "FBZ Express" : "meetup"})
+                      </span>
                       <span className="text-xs text-emerald-600 font-medium">Free</span>
                     </div>
                     <div className="flex justify-between px-3 py-2.5">
