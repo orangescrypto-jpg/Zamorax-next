@@ -23,11 +23,12 @@ import { Step3Attributes }  from "./Step3Attributes"
 import { Step4Media }       from "./Step4Media"
 import { Step5Location }    from "./Step5Location"
 import { Step5bShipment }   from "./Step5bShipment"
+import { Step6bDiscount }   from "./Step6bDiscount"
 import { Step6Coupon }      from "./Step6Coupon"
 import { Step6Boost }       from "./Step6Boost"
 import { Step7Review }      from "./Step7Review"
 
-const BASE_STEPS = ["Category", "Details", "Attributes", "Media", "Location", "Delivery", "Coupon", "Boost", "Review"]
+const BASE_STEPS = ["Category", "Details", "Attributes", "Media", "Location", "Delivery", "Price Cut", "Coupon", "Boost", "Review"]
 const STEPS_NO_COUPON = BASE_STEPS.filter(s => s !== "Coupon")
 
 export function ListingForm() {
@@ -41,12 +42,15 @@ export function ListingForm() {
   const steps = couponsOn ? BASE_STEPS : STEPS_NO_COUPON
 
   // Step numbers shift depending on whether the Coupon step is shown.
+  // Price Cut (standing discount) is always shown — not gated on any
+  // admin sub-setting, unlike Coupon.
   // With coupons: 1 Category 2 Details 3 Attributes 4 Media 5 Location
-  //   6 Delivery 7 Coupon 8 Boost 9 Review
+  //   6 Delivery 7 Price Cut 8 Coupon 9 Boost 10 Review
   // Without: same but Coupon removed, Boost/Review shift down by one.
-  const couponStepNum = 7
-  const boostStepNum  = couponsOn ? 8 : 7
-  const reviewStepNum = couponsOn ? 9 : 8
+  const discountStepNum = 7
+  const couponStepNum = 8
+  const boostStepNum  = couponsOn ? 9 : 8
+  const reviewStepNum = couponsOn ? 10 : 9
 
   const form = useForm<ListingFormValues>({
     resolver: zodResolver(listingSchema),
@@ -59,6 +63,7 @@ export function ListingForm() {
       isFragile: false,
       shippingMethods: ["meetup"],
       couponEnabled: false,
+      standingDiscountEnabled: false,
       boostType: "none",
       // FIX: was defaulting to true, meaning sellers were silently
       // "pre-agreed" to the listing rules before ever seeing the checkbox.
@@ -136,6 +141,7 @@ export function ListingForm() {
       4: ["images"],
       5: ["nigerianState", "city"],
       6: ["shippingMethods", "fbzWarehouseId", "fbzQuantity"],
+      [discountStepNum]: ["standingDiscountPercent"],
       [boostStepNum]: ["boostType"],
       [reviewStepNum]: ["acceptTerms"],
     }
@@ -243,6 +249,8 @@ export function ListingForm() {
         coupon_enabled:       (couponsOn && data.couponEnabled) ? 1 : 0,
         coupon_code:          (couponsOn && data.couponEnabled && data.couponCode) ? data.couponCode.toUpperCase() : null,
         coupon_discount_percent: (couponsOn && data.couponEnabled) ? (data.couponDiscountPercent ?? null) : null,
+        standing_discount_enabled: data.standingDiscountEnabled ? 1 : 0,
+        standing_discount_percent: data.standingDiscountEnabled ? (data.standingDiscountPercent ?? null) : null,
         status:               isFbzChosen ? "pending_fbz" : "pending",
         views:                0,
         saves:                0,
@@ -335,6 +343,7 @@ export function ListingForm() {
           {step === 4 && <Step4Media />}
           {step === 5 && <Step5Location />}
           {step === 6 && <Step5bShipment />}
+          {step === discountStepNum && <Step6bDiscount />}
           {couponsOn && step === couponStepNum && <Step6Coupon />}
           {step === boostStepNum && <Step6Boost />}
           {step === reviewStepNum && <Step7Review />}
