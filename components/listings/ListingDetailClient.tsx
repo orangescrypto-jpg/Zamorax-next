@@ -607,7 +607,7 @@ export function ListingDetailClient({ id, initialListing }: Props) {
 
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge variant="secondary">{conditionLabel[listing.condition] || listing.condition}</Badge>
-              {listing.isFBZ && (
+              {listing.isFBZ && !listing.isOfficial && (
                 <Badge className="bg-amber-100 text-amber-700 border-0 gap-1">
                   <Zap className="h-3 w-3" /> Fulfilled by Zamorax
                 </Badge>
