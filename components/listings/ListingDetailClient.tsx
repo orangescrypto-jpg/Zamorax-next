@@ -32,7 +32,7 @@ import {
   MapPin, Shield, Truck, Heart, Share2, MessageSquare, Eye, Flag,
   Tag, Clock, Loader2,
   CheckCircle, Star, Store, ArrowLeft, CalendarDays,
-  Flame, ShoppingCart, Minus, Plus, PalmtreeIcon, AlertTriangle, Package } from "lucide-react"
+  Flame, ShoppingCart, Minus, Plus, PalmtreeIcon, AlertTriangle, Package, Zap } from "lucide-react"
 import Link from "next/link"
 import { ImageCarousel } from "@/components/listings/ImageCarousel"
 import { FormattedDescription } from "@/components/listings/FormattedDescription"
@@ -605,6 +605,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
 
             <div className="flex flex-wrap gap-2 mt-2">
               <Badge variant="secondary">{conditionLabel[listing.condition] || listing.condition}</Badge>
+              {listing.isFBZ && (
+                <Badge className="bg-amber-100 text-amber-700 border-0 gap-1">
+                  <Zap className="h-3 w-3" /> Fulfilled by Zamorax
+                </Badge>
+              )}
               {listing.isHubVerified && (
                 <Badge className="bg-emerald-100 text-emerald-700 border-0 gap-1">
                   <CheckCircle className="h-3 w-3" /> Hub Verified
