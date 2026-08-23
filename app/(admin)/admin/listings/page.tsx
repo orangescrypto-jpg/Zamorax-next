@@ -58,16 +58,20 @@ interface AdminListingRow {
 }
 
 const STATUS_TABS = [
-  { value: "all",      label: "All" },
-  { value: "pending",  label: "Pending" },
-  { value: "active",   label: "Active" },
-  { value: "rejected", label: "Rejected" },
+  { value: "all",               label: "All" },
+  { value: "pending",           label: "Pending" },
+  { value: "pending_fbz",       label: "Pending (FBZ)" },
+  { value: "pending_fbz_stock", label: "Awaiting Stock" },
+  { value: "active",            label: "Active" },
+  { value: "rejected",          label: "Rejected" },
 ] as const
 
 const statusBadge: Record<string, string> = {
-  pending:   "bg-amber-100 text-amber-700",
-  active:    "bg-green-100 text-green-700",
-  rejected:  "bg-red-100 text-red-700",
+  pending:            "bg-amber-100 text-amber-700",
+  pending_fbz:        "bg-amber-100 text-amber-700",
+  pending_fbz_stock:  "bg-blue-100 text-blue-700",
+  active:             "bg-green-100 text-green-700",
+  rejected:           "bg-red-100 text-red-700",
   sold:      "bg-blue-100 text-blue-700",
   rented:    "bg-blue-100 text-blue-700",
   paused:    "bg-gray-100 text-gray-600",
@@ -272,7 +276,7 @@ export default function AdminListingsPage() {
                       <Pencil className="h-3 w-3 mr-1" />Edit
                     </Link>
                   </Button>
-                  {listing.status === "pending" && (
+                  {(listing.status === "pending" || listing.status === "pending_fbz") && (
                     <>
                       <Button
                         size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
