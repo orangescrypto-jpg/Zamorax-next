@@ -32,6 +32,10 @@ function rowToListing(row: Record<string, unknown>) {
     ? { code: String(row.coupon_code), discountPercent: Number(row.coupon_discount_percent ?? 0) }
     : null
 
+  const standingDiscount = row.standing_discount_enabled && row.standing_discount_percent
+    ? { discountPercent: Number(row.standing_discount_percent ?? 0) }
+    : null
+
   return {
     id:             row.id,
     sellerId:       row.seller_id,
@@ -58,6 +62,7 @@ function rowToListing(row: Record<string, unknown>) {
     unitOfSale:     row.unit_of_sale ? String(row.unit_of_sale) : null,
     offersEnabled:  row.offers_enabled == null ? true : !!row.offers_enabled,
     coupon,
+    standingDiscount,
     nigerianState:  row.nigerian_state,
     city:           row.city,
     views:          Number(row.views) || 0,
