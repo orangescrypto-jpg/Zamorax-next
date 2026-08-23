@@ -73,7 +73,7 @@ export interface RegisterData {
 // ─── Listing ─────────────────────────────────────────────────────
 export type ListingType      = "sale" | "rent" | "both"
 export type ListingCondition = "brand_new" | "open_box" | "grade_a" | "grade_b"
-export type ListingStatus    = "draft" | "pending" | "active" | "sold" | "rented" | "paused" | "suspended" | "rejected"
+export type ListingStatus    = "draft" | "pending" | "pending_fbz" | "pending_fbz_stock" | "active" | "sold" | "rented" | "paused" | "suspended" | "rejected"
 export type BoostType        = "standard" | "premium" | "category_top" | null
 
 export interface Listing {
