@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { usePlatformSettings } from "@/hooks/usePlatformSettings"
 import { useFeeSettings } from "@/hooks/useFeeSettings"
 import { calculateFees } from "@/src/services/feeSettings"
-import { OrdersService, OffersService } from "@/src/services"
+import { OrdersService, OffersService, ShippingService, LogisticsService } from "@/src/services"
 import { ManualPaymentService, PaystackPaymentService, FlutterwavePaymentService } from "@/src/services/payment"
 import { usePaymentMethods } from "@/hooks/usePaymentMethods"
 import { useLastAddress } from "@/hooks/useLastAddress"
@@ -53,6 +53,9 @@ interface Props {
     nigerianState?: string
     estimatedDeliveryDays?: string
     isFBZ?: boolean
+    weightKg?: number
+    isFragile?: boolean
+    deliveryFeeOverrideKobo?: number | null
   }
   // Quantity the buyer selected on the listing page (bulk-pricing tiles or
   // the +/- stepper). listing.priceSale is treated as the PER-UNIT price
@@ -133,6 +136,35 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // "meetup" either way, same as before.
   const fbzAvailable = !!settings.fbzEnabled && !!listing.isFBZ
   const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">("meetup")
+  const [fbzFee, setFbzFee] = useState(0)
+
+  // FBZ Express fee — same zone-based LogisticsService pricing used across
+  // the app, dispatched from the nearest active FBZ warehouse (not the
+  // seller's state — Zamorax ships this one, from wherever the stock sits).
+  // Skipped entirely when the listing has a manual override set (e.g. 0
+  // for free delivery on this specific listing) — that value wins outright.
+  useEffect(() => {
+    if (!fbzAvailable || !state) return
+    if (listing.deliveryFeeOverrideKobo != null) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { fbzWarehouses } = await ShippingService.getConfig()
+        const active = fbzWarehouses.filter(w => w.isActive)
+        if (!active.length) return
+        const warehouse = active.find(w => w.state === state) ?? active[0]
+        const pricing = await LogisticsService.getPricing()
+        const feeBreakdown = LogisticsService.calculateFee(
+          warehouse.state, state, pricing,
+          { weightKg: listing.weightKg, isFragile: listing.isFragile },
+        )
+        if (!cancelled) setFbzFee(feeBreakdown.total)
+      } catch {
+        // Leave at 0 rather than blocking checkout on a pricing-fetch failure.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [fbzAvailable, state])
 
   // Single last-used address, auto-overwritten on each successful order.
   // Prefills the address step so returning buyers don't re-type it, but
@@ -161,6 +193,16 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
     ? acceptedOffer.agreedPrice
     : resolvedTotal != null ? resolvedTotal : unitPriceKobo * effectiveQty
   const breakdown     = calculateFees(itemPriceKobo, "sale", fees)
+  // Delivery fee is additive on top of the item/fee breakdown — it goes to
+  // Zamorax logistics, not the seller, so it must NOT be folded into
+  // breakdown.sellerPayoutKobo. 0 for meetup (buyer/seller coordinate
+  // directly, no charge). For FBZ: the listing's manual override wins if
+  // set (including 0, for a listing marked free-delivery); otherwise the
+  // live-calculated fbzFee, which is 0 until pricing has loaded.
+  const deliveryFeeKobo = deliveryMethod === "fbz"
+    ? (listing.deliveryFeeOverrideKobo ?? fbzFee)
+    : 0
+  const buyerTotalWithDeliveryKobo = breakdown.buyerTotalKobo + deliveryFeeKobo
 
   const sellerDisplayName =
     seller?.storeName || seller?.fullName || listing.sellerName || "Seller"
@@ -209,9 +251,10 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
               itemImage:       listing.images?.[0] ?? "",
               selectedColor:   selectedColor ?? undefined,
               selectedSize:    selectedSize ?? undefined,
-              totalAmount:     breakdown.buyerTotalKobo,
+              totalAmount:     buyerTotalWithDeliveryKobo,
               platformFee:     breakdown.commissionKobo,
               sellerPayout:    breakdown.sellerPayoutKobo,
+              deliveryFee:     deliveryFeeKobo,
               deliveryStreet:  street.trim(),
               deliveryCity:    city.trim(),
               deliveryState:   state,
@@ -240,7 +283,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
 
       const paymentResult = await activeService.initializePayment({
         purpose:     "order",
-        amount:      breakdown.buyerTotalKobo,
+        amount:      buyerTotalWithDeliveryKobo,
         email:       user.email,
         userId:      user.uid,
         metadata:    draftForMetadata ? { listingId: listing.id, orderDraft: draftForMetadata } : { listingId: listing.id },
@@ -283,9 +326,10 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           itemImage:       listing.images?.[0],
           selectedColor:   selectedColor ?? undefined,
           selectedSize:    selectedSize ?? undefined,
-          totalAmount:     breakdown.buyerTotalKobo,
+          totalAmount:     buyerTotalWithDeliveryKobo,
           platformFee:     breakdown.commissionKobo,
           sellerPayout:    breakdown.sellerPayoutKobo,
+          deliveryFee:     deliveryFeeKobo,
           status:          "pending" as const,
           orderType:       "purchase" as const,
           escrowStatus:    "pending" as const,
@@ -541,8 +585,15 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                           <div className="flex items-center gap-1">
                             <p className="text-xs font-semibold">FBZ Express</p>
                             <span className="text-[9px] font-medium text-amber-700 bg-amber-100 rounded px-1">⚡</span>
+                            {listing.deliveryFeeOverrideKobo === 0 && (
+                              <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 rounded px-1">Free Delivery</span>
+                            )}
                           </div>
-                          <p className="text-[10px] text-muted-foreground">Shipped from Zamorax warehouse</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {listing.deliveryFeeOverrideKobo === 0
+                              ? "Shipped from Zamorax warehouse"
+                              : `Shipped from Zamorax warehouse${fbzFee > 0 ? ` · ${formatPrice(listing.deliveryFeeOverrideKobo ?? fbzFee)}` : ""}`}
+                          </p>
                         </button>
                       </div>
                     </div>
@@ -587,11 +638,13 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       <span className="text-muted-foreground text-xs">
                         Delivery ({deliveryMethod === "fbz" ? "FBZ Express" : "meetup"})
                       </span>
-                      <span className="text-xs text-emerald-600 font-medium">Free</span>
+                      <span className={`text-xs font-medium ${deliveryFeeKobo > 0 ? "" : "text-emerald-600"}`}>
+                        {deliveryFeeKobo > 0 ? formatPrice(deliveryFeeKobo) : "Free"}
+                      </span>
                     </div>
                     <div className="flex justify-between px-3 py-2.5">
                       <span className="font-bold text-sm">Grand Total</span>
-                      <span className="font-bold text-primary text-sm">{formatPrice(breakdown.buyerTotalKobo)}</span>
+                      <span className="font-bold text-primary text-sm">{formatPrice(buyerTotalWithDeliveryKobo)}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-2 p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg">
@@ -620,7 +673,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   <div className="rounded-lg border bg-muted/20 divide-y text-sm">
                     <div className="flex justify-between px-3 py-2.5">
                       <span className="font-semibold text-sm">Total to pay</span>
-                      <span className="text-primary font-bold text-sm">{formatPrice(breakdown.buyerTotalKobo)}</span>
+                      <span className="text-primary font-bold text-sm">{formatPrice(buyerTotalWithDeliveryKobo)}</span>
                     </div>
                   </div>
 
@@ -629,7 +682,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                       Nothing is actually restricted; the buyer can still
                       pick any enabled method below. Zamorax Direct
                       purchases (seller.isOfficial) never show this. */}
-                  {!seller?.isOfficial && breakdown.buyerTotalKobo > 50_000 * 100 && (
+                  {!seller?.isOfficial && buyerTotalWithDeliveryKobo > 50_000 * 100 && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                       <p className="text-xs text-amber-800">
                         For orders above ₦50,000 from third-party sellers, we recommend paying via <strong>Bank Transfer (Manual)</strong> for added safety.
@@ -680,7 +733,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
               {/* Step 4 — Bank Details (manual payment only) */}
               {step === "bank_details" && pendingRef && (
                 <ManualPaymentInstructions
-                  amount={breakdown.buyerTotalKobo}
+                  amount={buyerTotalWithDeliveryKobo}
                   reference={pendingRef}
                   bankDetails={pendingBankDetails}
                   userId={user?.uid ?? ""}
@@ -731,7 +784,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                   >
                     {loading
                       ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Placing order...</>
-                      : <>Pay {formatPrice(breakdown.buyerTotalKobo)}</>}
+                      : <>Pay {formatPrice(buyerTotalWithDeliveryKobo)}</>}
                   </Button>
                 </div>
               )}
