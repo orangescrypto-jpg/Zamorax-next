@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, X, MapPin, Truck, ShoppingCart, CheckCircle, ChevronRight, ChevronLeft } from "lucide-react"
+import { Loader2, X, MapPin, Truck, ShoppingCart, CheckCircle, ChevronRight, ChevronLeft, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -528,6 +528,13 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                     <span>Grand Total</span>
                     <span className="text-primary">{formatPrice(grandTotal())}</span>
                   </div>
+                </div>
+
+                <div className="flex items-start gap-2 p-2.5 bg-blue-50 border border-blue-100 rounded-lg">
+                  <AlertCircle className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-blue-700">
+                    Each item ships within its listed delivery window. Not shipped in time? Contact support for a full refund.
+                  </p>
                 </div>
 
                 {/* Notice only — third-party (non-Zamorax-Direct) cart
