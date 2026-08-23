@@ -83,7 +83,6 @@ export function FBZWarehouseLocations() {
       }))
       // DEBUG: temporary — visible in browser devtools console, confirms
       // exactly what the dedicated route returned.
-      console.log("[FBZWarehouseLocations] loaded", rows.length, "warehouses; server debug:", json._debug)
       setWarehouses(rows)
       setLoadError(null)
     } catch (err) {
