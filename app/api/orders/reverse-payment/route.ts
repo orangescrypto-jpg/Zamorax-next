@@ -13,13 +13,14 @@
 //      amount and logs a "debit" wallet_transactions row. If the seller's
 //      balance can't cover it, the wallet goes negative rather than
 //      silently under-reversing — admin needs to see that on the wallet.
-//   3. If the order was paid via Paystack and has a payment_reference,
-//      attempts a real Paystack refund via /refund so the buyer's money
-//      actually goes back to their card/bank. This is best-effort: if
-//      Paystack refuses (e.g. already refunded, reference too old), the
-//      order status is still flipped to "refunded" so admin bookkeeping
-//      stays correct, and the Paystack error is surfaced in the response
-//      for the admin to see/act on manually.
+//   3. If the order was paid via Paystack or Flutterwave and has a
+//      payment_reference, attempts a real refund through that provider's
+//      API so the buyer's money actually goes back to their card/bank.
+//      This is best-effort: if the provider refuses (e.g. already
+//      refunded, reference too old), the order status is still flipped to
+//      "refunded" so admin bookkeeping stays correct, and the provider's
+//      error is surfaced in the response for the admin to see/act on
+//      manually.
 //   4. Sets order.status = "refunded", escrow_status = "refunded".
 //   5. Notifies + emails both buyer and seller with the reason.
 //
@@ -73,6 +74,50 @@ async function refundPaystack(reference: string, amountKobo?: number) {
     return { ok: true, data: data.data }
   } catch (err: any) {
     return { ok: false, error: err.message || "Paystack refund request failed" }
+  }
+}
+
+// Flutterwave refunds are two calls: first resolve the numeric transaction
+// id from our stored `payment_reference` (tx_ref) via the verify endpoint,
+// then POST /transactions/{id}/refund with that id. Unlike Paystack, which
+// accepts the string reference directly, Flutterwave requires the
+// integer id — so a lookup step is unavoidable here.
+async function refundFlutterwave(reference: string, amountKobo?: number) {
+  const secretKey = process.env.FLW_SECRET_KEY
+  if (!secretKey) return { ok: false, error: "FLW_SECRET_KEY not configured" }
+
+  try {
+    // 1. Resolve tx_ref -> Flutterwave's numeric transaction id.
+    const verifyRes = await fetch(
+      `https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(reference)}`,
+      { headers: { Authorization: `Bearer ${secretKey}` } },
+    )
+    const verifyData = await verifyRes.json()
+    const txId = verifyData?.data?.id
+    if (!verifyRes.ok || !verifyData?.status || !txId) {
+      return { ok: false, error: verifyData?.message || "Could not resolve Flutterwave transaction id" }
+    }
+
+    // 2. Issue the refund against that transaction id. Flutterwave amount
+    // is in naira, not kobo, so convert down from our kobo storage unit.
+    const res = await fetch(`https://api.flutterwave.com/v3/transactions/${txId}/refund`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        // Omit amount to let Flutterwave refund the full original charge.
+        ...(amountKobo ? { amount: amountKobo / 100 } : {}),
+      }),
+    })
+    const data = await res.json()
+    if (!res.ok || data?.status !== "success") {
+      return { ok: false, error: data?.message || "Flutterwave refund failed" }
+    }
+    return { ok: true, data: data.data }
+  } catch (err: any) {
+    return { ok: false, error: err.message || "Flutterwave refund request failed" }
   }
 }
 
@@ -150,13 +195,20 @@ export async function POST(req: NextRequest, context: RouteContext) {
       walletReversed = true
     }
 
-    // ── 2. Attempt a real Paystack refund to send the buyer's money back ──
+    // ── 2. Attempt a real refund via whichever provider was used, so the ──
+    // buyer's money actually goes back to their card/bank.
     let paystackRefund: { attempted: boolean; ok: boolean; error?: string } = { attempted: false, ok: false }
+    let flutterwaveRefund: { attempted: boolean; ok: boolean; error?: string } = { attempted: false, ok: false }
     if (provider === "paystack" && reference) {
       paystackRefund.attempted = true
       const result = await refundPaystack(reference, amount || undefined)
       paystackRefund.ok = result.ok
       if (!result.ok) paystackRefund.error = result.error
+    } else if (provider === "flutterwave" && reference) {
+      flutterwaveRefund.attempted = true
+      const result = await refundFlutterwave(reference, amount || undefined)
+      flutterwaveRefund.ok = result.ok
+      if (!result.ok) flutterwaveRefund.error = result.error
     }
 
     // ── 3. Flip the order to refunded regardless — this is the admin's ──
@@ -209,6 +261,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       success: true,
       walletReversed,
       paystackRefund,
+      flutterwaveRefund,
     })
   } catch (err: any) {
     console.error("[POST /api/orders/reverse-payment]", err)
