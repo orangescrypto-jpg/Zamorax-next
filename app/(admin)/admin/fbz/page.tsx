@@ -44,6 +44,12 @@ export default function AdminFBZPage() {
   const [actualQty, setActualQty] = useState("")
   const [warehouseSlot, setWarehouseSlot] = useState("")
   const [intakeNotes, setIntakeNotes] = useState("")
+  // Full listing behind the shipment being activated — fetched on open so
+  // admin can see its delivery methods (did the seller actually opt into
+  // FBZ as a method?) and current status before confirming activation,
+  // not just the seller-claimed quantity from the shipment row.
+  const [intakeListing, setIntakeListing] = useState<any>(null)
+  const [intakeListingLoading, setIntakeListingLoading] = useState(false)
 
   // Reject dialog
   const [rejectOpen, setRejectOpen] = useState(false)
@@ -261,7 +267,16 @@ export default function AdminFBZPage() {
                 <Button
                   size="sm"
                   className="flex-1 bg-gradient-to-r from-primary to-emerald-500 text-white"
-                  onClick={() => { setIntakeShipment(s); setActualQty(String(s.quantity)); setIntakeOpen(true) }}
+                  onClick={() => {
+                    setIntakeShipment(s)
+                    setActualQty(String(s.quantity))
+                    setIntakeOpen(true)
+                    setIntakeListing(null)
+                    setIntakeListingLoading(true)
+                    AdminService.getDoc("listings", s.listingId)
+                      .then(setIntakeListing)
+                      .finally(() => setIntakeListingLoading(false))
+                  }}
                 >
                   <Zap className="h-3.5 w-3.5 mr-1.5 fill-white" /> Inspect & Activate FBZ
                 </Button>
@@ -323,6 +338,49 @@ export default function AdminFBZPage() {
                 <p className="font-medium">{intakeShipment.listingTitle}</p>
                 <p className="text-muted-foreground text-xs">Seller claimed: {intakeShipment.quantity} units</p>
               </div>
+
+              {/* Listing delivery-method check — confirms the seller
+                  actually opted into FBZ as a shipping method (not just
+                  submitted a shipment) and that the listing is currently
+                  active, before admin commits to activating it publicly. */}
+              {intakeListingLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading listing details...
+                </div>
+              ) : intakeListing ? (
+                <div className="rounded-lg border p-3 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Listing status</span>
+                    <Badge variant={intakeListing.status === "active" ? "default" : "outline"} className="text-[10px]">
+                      {intakeListing.status ?? "unknown"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Delivery methods offered</span>
+                    <div className="flex gap-1 flex-wrap justify-end">
+                      {(intakeListing.shippingMethods ?? ["meetup"]).map((m: string) => (
+                        <Badge key={m} variant="outline" className="text-[10px]">
+                          {m === "meetup" ? "Meet Up" : m === "zamorax_logistics" ? "ZLA" : m === "fbz" ? "FBZ" : m}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {!(intakeListing.shippingMethods ?? []).includes("fbz") && (
+                    <p className="text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5 flex items-start gap-1.5">
+                      <Truck className="h-3 w-3 mt-0.5 shrink-0" />
+                      Seller hasn't selected "Fulfilled by Zamorax" as a delivery method on this listing — confirm with them before activating.
+                    </p>
+                  )}
+                  {intakeListing.status !== "active" && (
+                    <p className="text-red-700 bg-red-50 border border-red-100 rounded px-2 py-1.5">
+                      This listing is not active ({intakeListing.status ?? "unknown"}) — it won't be visible to buyers even after FBZ activation.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-red-600">Couldn't load the underlying listing — it may have been deleted.</p>
+              )}
+
               <div className="space-y-1.5">
                 <Label>Actual quantity received (after inspection)</Label>
                 <Input
