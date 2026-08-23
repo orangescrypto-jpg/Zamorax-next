@@ -1,16 +1,16 @@
-// app/api/listings/featured/route.ts
-// Public endpoint — no auth required. Returns boosted active listings.
-// Used by:
-//   - Homepage FeaturedListings section (no params — top 8 site-wide)
-//   - SponsoredListings on the listing detail page ("Sponsored Products"),
-//     which passes category + excludeId to bias results toward the same
-//     category as the listing being viewed, falling back to any boosted
-//     listing if the category doesn't have enough.
+// app/api/listings/official/route.ts
+// Public endpoint — no auth required. Returns active listings belonging to
+// official Zamorax-owned sellers (e.g. "Zamorax Enterprises Ltd" — bulk-
+// sourced, locally warehoused stock). "Official" is a flag on the seller
+// (users.is_official), not on the listing — see migration 0002 — so this
+// route joins listings to users rather than reading a per-listing column.
 //
-// Query params (all optional):
-//   ?category=slug   prefer boosted listings in this category first
-//   ?excludeId=id    exclude this listing (so a listing doesn't "sponsor" itself)
-//   ?limit=N         cap results (default 8)
+// Supports optional query params:
+//   ?limit=N        cap results (homepage section uses the admin-configured
+//                    homepageZamoraxDirectCount; the dedicated /zamorax-direct
+//                    page can omit this or pass a larger page size)
+//   ?category=slug  filter to one category (used by the per-category
+//                    "Zamorax Direct only" toggle)
 export const dynamic = "force-dynamic"
 
 import { NextRequest, NextResponse } from "next/server"
@@ -24,6 +24,9 @@ function rowToListing(row: Record<string, unknown>) {
 
   let flashDeal: Record<string, unknown> | null = null
   try { flashDeal = row.flash_deal ? JSON.parse(row.flash_deal as string) : null } catch { flashDeal = null }
+
+  let bulkPricing: { minQty: number; price: number }[] | null = null
+  try { bulkPricing = row.bulk_pricing ? JSON.parse(row.bulk_pricing as string) : null } catch { bulkPricing = null }
 
   const coupon = row.coupon_enabled && row.coupon_code
     ? { code: String(row.coupon_code), discountPercent: Number(row.coupon_discount_percent ?? 0) }
@@ -47,10 +50,27 @@ function rowToListing(row: Record<string, unknown>) {
     images,
     status:         row.status,
     isBoosted:      !!row.is_boosted,
-    isFeatured:     !!row.is_boosted,
-    boostEndsAt:    row.boost_expires_at,
+    isFBZ:          !!row.is_fbz,
+    isHubVerified:  !!row.is_hub_verified,
+    deliveryFeeOverrideKobo: row.delivery_fee_override_kobo != null ? Number(row.delivery_fee_override_kobo) : null,
+    estimatedDeliveryDays: row.estimated_delivery_days ? String(row.estimated_delivery_days) : undefined,
+    weightKg:       row.weight_kg != null ? Number(row.weight_kg) : undefined,
+    isFragile:      row.is_fragile ? !!row.is_fragile : undefined,
+    shippingMethods: (() => {
+      try { return row.delivery_options ? JSON.parse(row.delivery_options as string) : (row.shipping_methods ? JSON.parse(row.shipping_methods as string) : undefined) }
+      catch { return undefined }
+    })(),
+    // True either because the seller itself is official (Zamorax
+    // Enterprises), or because admin picked this specific listing to
+    // showcase here — both cases render identically in Zamorax Direct.
+    isOfficial:     !!row.is_official_seller || !!row.is_zamorax_pick,
+    isZamoraxPick:  !!row.is_zamorax_pick,
     flashDeal,
     isFlashDeal:    !!row.is_flash_deal,
+    bulkPricing,
+    minOrderQty:    row.min_order_qty != null ? Number(row.min_order_qty) : null,
+    unitOfSale:     row.unit_of_sale ? String(row.unit_of_sale) : null,
+    offersEnabled:  row.offers_enabled == null ? true : !!row.offers_enabled,
     coupon,
     standingDiscount,
     nigerianState:  row.nigerian_state,
@@ -63,73 +83,40 @@ function rowToListing(row: Record<string, unknown>) {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   const nativeDB = (context as any)?.env?.DB
-  const now = new Date().toISOString()
 
   const { searchParams } = new URL(req.url)
-  const category  = searchParams.get("category")
-  const excludeId = searchParams.get("excludeId")
-  const limit     = Math.min(Math.max(Number(searchParams.get("limit")) || 8, 1), 20)
+  const limitParam    = Number(searchParams.get("limit"))
+  const limit          = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 24
+  const category       = searchParams.get("category")
 
   try {
-    const excludeClause = excludeId ? `AND id != ?` : ``
+    const conditions: string[] = [
+      "l.status = 'active'",
+      "(u.is_official = 1 OR l.is_zamorax_pick = 1)",
+    ]
+    const params: unknown[] = []
 
-    let rows: any
     if (category) {
-      // Same-category boosted listings first, then top up with any other
-      // boosted listing so the row still fills even if the category is thin.
-      const categoryRows = await d1Query(
-        `SELECT * FROM listings
-         WHERE status = 'active'
-           AND is_boosted = 1
-           AND category = ?
-           AND (boost_expires_at IS NULL OR boost_expires_at > ?)
-           ${excludeClause}
-         ORDER BY boost_expires_at DESC
-         LIMIT ?`,
-        excludeId ? [category, now, excludeId, limit] : [category, now, limit],
-        nativeDB,
-      )
-      const categoryResults = (categoryRows as any)?.results ?? []
-
-      if (categoryResults.length < limit) {
-        const remaining = limit - categoryResults.length
-        const seenIds = categoryResults.map((r: any) => r.id)
-        const excludeIds = excludeId ? [excludeId, ...seenIds] : seenIds
-        const placeholders = excludeIds.map(() => "?").join(",")
-
-        const fillerRows = await d1Query(
-          `SELECT * FROM listings
-           WHERE status = 'active'
-             AND is_boosted = 1
-             AND (boost_expires_at IS NULL OR boost_expires_at > ?)
-             ${excludeIds.length ? `AND id NOT IN (${placeholders})` : ``}
-           ORDER BY boost_expires_at DESC
-           LIMIT ?`,
-          excludeIds.length ? [now, ...excludeIds, remaining] : [now, remaining],
-          nativeDB,
-        )
-        rows = { results: [...categoryResults, ...((fillerRows as any)?.results ?? [])] }
-      } else {
-        rows = { results: categoryResults }
-      }
-    } else {
-      rows = await d1Query(
-        `SELECT * FROM listings
-         WHERE status = 'active'
-           AND is_boosted = 1
-           AND (boost_expires_at IS NULL OR boost_expires_at > ?)
-           ${excludeClause}
-         ORDER BY boost_expires_at DESC
-         LIMIT ?`,
-        excludeId ? [now, excludeId, limit] : [now, limit],
-        nativeDB,
-      )
+      conditions.push("l.category = ?")
+      params.push(category)
     }
+
+    params.push(limit)
+
+    const rows = await d1Query(
+      `SELECT l.*, u.is_official AS is_official_seller FROM listings l
+       JOIN users u ON u.uid = l.seller_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY l.is_boosted DESC, l.created_at DESC
+       LIMIT ?`,
+      params,
+      nativeDB,
+    )
 
     const listings = ((rows as any)?.results ?? []).map((r: any) => rowToListing(r))
     return NextResponse.json({ listings })
   } catch (err: any) {
-    console.error("[listings/featured]", err)
-    return NextResponse.json({ listings: [] })
+    console.error("[listings/official]", err)
+    return NextResponse.json({ listings: [], _debugError: err?.message ?? String(err) })
   }
 }
