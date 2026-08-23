@@ -56,6 +56,7 @@ interface Props {
     weightKg?: number
     isFragile?: boolean
     deliveryFeeOverrideKobo?: number | null
+    shippingMethods?: string[]
   }
   // Quantity the buyer selected on the listing page (bulk-pricing tiles or
   // the +/- stepper). listing.priceSale is treated as the PER-UNIT price
@@ -143,9 +144,10 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // delivery method the seller never offered. Default to whatever the
   // listing's own shippingMethods actually say, falling back to "meetup"
   // only when the listing doesn't specify (legacy rows).
-  const listingDefaultsToFbz = Array.isArray(listing.shippingMethods)
-    ? listing.shippingMethods.length === 1 && listing.shippingMethods[0] === "fbz"
-    : listing.shippingMethods === "fbz"
+  const listingDefaultsToFbz =
+    Array.isArray(listing.shippingMethods) &&
+    listing.shippingMethods.length === 1 &&
+    listing.shippingMethods[0] === "fbz"
   const [deliveryMethod, setDeliveryMethod] = useState<"meetup" | "fbz">(
     fbzAvailable && listingDefaultsToFbz ? "fbz" : "meetup"
   )
