@@ -152,6 +152,14 @@ export interface Listing {
     discountPercent: number
     expiresAt: string | FirestoreTimestamp                   // ISO string
     createdAt: string | FirestoreTimestamp
+    // When true, this discount also scales every bulk-pricing tier (see
+    // resolveBulkPrice in lib/utils) by the same percentage, keeping the
+    // bulk price ladder consistent with the discounted single-piece price.
+    // Defaults to false/undefined — off unless the seller explicitly
+    // opts in, since a bulk tier is often already a negotiated bundle
+    // price the seller may not want stacked with a flash discount.
+    // Meaningless (ignored) on listings with no bulkPricing.
+    applyToBulk?: boolean
   } | null
   // ── Standing discount — a plain, permanent price cut the seller sets at
   // listing creation or edit. Unlike flashDeal, it has no expiry/countdown
@@ -161,6 +169,10 @@ export interface Listing {
   // seller turns it off or changes it.
   standingDiscount?: {
     discountPercent: number
+    // Same opt-in semantics as flashDeal.applyToBulk above — off by
+    // default, only scales bulk tiers if the seller explicitly turns it
+    // on. Meaningless (ignored) on listings with no bulkPricing.
+    applyToBulk?: boolean
   } | null
   // ── Seller-set coupon code — set at listing creation, gated on
   // sub_settings.couponsEnabled. Unlike flashDeal (time-limited, admin-style),
