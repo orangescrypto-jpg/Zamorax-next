@@ -9,7 +9,7 @@
 // /admin/sub-settings) — the full, unfiltered list always lives at
 // /free-delivery regardless of this toggle.
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Truck, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
 import { useSubSettings } from "@/hooks/useSubSettings"
@@ -58,24 +58,13 @@ export function FreeDeliverySection() {
     return () => window.removeEventListener("resize", check)
   }, [listings])
 
-  if (!settings.freeDeliveryEnabled) return null
-  if (loading || listings.length === 0) return null
-
-  const updateScrollState = () => {
-    const el = scrollerRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    setCanScroll(maxScroll > 4)
-    setScrollPct(maxScroll > 4 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0)
-  }
-
-  const scrollByCards = (dir: 1 | -1) => {
+  const scrollByCards = useCallback((dir: 1 | -1) => {
     const el = scrollerRef.current
     if (!el) return
     const card = el.querySelector<HTMLElement>("[data-carousel-card]")
     const step = card ? card.offsetWidth + 12 : el.clientWidth * 0.46
     el.scrollBy({ left: dir * step, behavior: "smooth" })
-  }
+  }, [])
 
   // Autoplay — advances one card at a time, looping back to the start once
   // it reaches the end. Only runs when the row overflows and isn't paused.
@@ -93,19 +82,32 @@ export function FreeDeliverySection() {
       }
     }, AUTOPLAY_MS)
     return () => { if (autoplayRef.current) clearInterval(autoplayRef.current) }
-  }, [canScroll, listings.length])
+  }, [canScroll, listings.length, scrollByCards])
 
   // Pause autoplay on manual touch/drag/wheel, resume a few seconds after
   // the user stops interacting.
-  const pauseAutoplay = () => {
+  const pauseAutoplay = useCallback(() => {
     pausedRef.current = true
     if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
     resumeTimeoutRef.current = setTimeout(() => { pausedRef.current = false }, RESUME_DELAY_MS)
-  }
+  }, [])
 
   useEffect(() => {
     return () => { if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current) }
   }, [])
+
+  // ── Everything below this line may early-return, so every hook above
+  // this point must run on every render regardless of these conditions.
+  if (!settings.freeDeliveryEnabled) return null
+  if (loading || listings.length === 0) return null
+
+  const updateScrollState = () => {
+    const el = scrollerRef.current
+    if (!el) return
+    const maxScroll = el.scrollWidth - el.clientWidth
+    setCanScroll(maxScroll > 4)
+    setScrollPct(maxScroll > 4 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0)
+  }
 
   return (
     <section>
