@@ -53,6 +53,17 @@ export function PromoStrip() {
   const [banners, setBanners] = useState<FeaturedBanner[]>(FALLBACK)
   const [index, setIndex] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  // Drag/swipe state — refs so touch handlers don't need to be re-created
+  // every render, plain numbers so we don't fight React's render cycle
+  // mid-gesture.
+  const dragStartX = useRef(0)
+  const dragDeltaX = useRef(0)
+  const isDragging = useRef(false)
+  const suppressClick = useRef(false)
+  const [dragOffsetPct, setDragOffsetPct] = useState(0) // live drag translate, 0 when not dragging
 
   useEffect(() => {
     let active = true
@@ -79,29 +90,96 @@ export function PromoStrip() {
     if (index >= banners.length) setIndex(0)
   }, [banners, index])
 
+  const startAutoplay = () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (banners.length > 1) {
+      timerRef.current = setInterval(() => {
+        setIndex(i => (i + 1) % banners.length)
+      }, AUTOPLAY_MS)
+    }
+  }
+
   // Autoplay — mirrors HeaderBannerSlider.tsx: only runs with more than one
   // card, advances one at a time, pauses cleanly on unmount.
   useEffect(() => {
-    if (banners.length <= 1) return
-    timerRef.current = setInterval(() => {
-      setIndex(i => (i + 1) % banners.length)
-    }, AUTOPLAY_MS)
+    startAutoplay()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [banners.length])
+
+  useEffect(() => {
+    return () => { if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current) }
+  }, [])
 
   const goTo = (i: number) => {
     setIndex(i)
     // Restart the autoplay countdown from a manual dot tap so it doesn't
     // immediately jump again right after the user picked one.
+    startAutoplay()
+  }
+
+  // Pause autoplay while dragging, resume a beat after release so the user
+  // has a moment to see where they landed before it moves again.
+  const pauseAutoplayForDrag = () => {
     if (timerRef.current) clearInterval(timerRef.current)
-    if (banners.length > 1) {
-      timerRef.current = setInterval(() => {
-        setIndex(cur => (cur + 1) % banners.length)
-      }, AUTOPLAY_MS)
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
+  }
+  const resumeAutoplaySoon = () => {
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
+    resumeTimeoutRef.current = setTimeout(startAutoplay, 3000)
+  }
+
+  const onDragStart = (clientX: number) => {
+    isDragging.current = true
+    dragStartX.current = clientX
+    dragDeltaX.current = 0
+    pauseAutoplayForDrag()
+  }
+
+  const onDragMove = (clientX: number) => {
+    if (!isDragging.current || !trackRef.current) return
+    dragDeltaX.current = clientX - dragStartX.current
+    const widthPx = trackRef.current.clientWidth || 1
+    setDragOffsetPct((dragDeltaX.current / widthPx) * 100)
+  }
+
+  const onDragEnd = () => {
+    if (!isDragging.current) return
+    isDragging.current = false
+    const widthPx = trackRef.current?.clientWidth || 1
+    const draggedPct = dragDeltaX.current / widthPx
+
+    // A real drag (moved more than a few px) should not also fire the
+    // card's Link click — the next click event gets swallowed once below.
+    if (Math.abs(dragDeltaX.current) > 5) {
+      suppressClick.current = true
+    }
+
+    // Swiped far enough (>15% of card width) — move one slide in that
+    // direction; otherwise snap back to the current slide.
+    if (draggedPct <= -0.15 && index < banners.length - 1) {
+      setIndex(i => i + 1)
+    } else if (draggedPct >= 0.15 && index > 0) {
+      setIndex(i => i - 1)
+    } else if (draggedPct <= -0.15 && index === banners.length - 1) {
+      setIndex(0) // loop forward from the last slide
+    } else if (draggedPct >= 0.15 && index === 0) {
+      setIndex(banners.length - 1) // loop back from the first slide
+    }
+
+    setDragOffsetPct(0)
+    resumeAutoplaySoon()
+  }
+
+  const onTrackClickCapture = (e: React.MouseEvent) => {
+    if (suppressClick.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      suppressClick.current = false
     }
   }
 
   if (banners.length === 0) return null
+
 
   return (
     <section>
@@ -111,8 +189,19 @@ export function PromoStrip() {
 
       <div className="relative overflow-hidden md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0">
         <div
-          className="flex gap-3 transition-transform duration-500 ease-out md:grid md:grid-cols-3 md:transition-none"
-          style={{ transform: `translateX(calc(-${index} * (100% + 0.75rem)))` }}
+          ref={trackRef}
+          className={`flex gap-3 md:grid md:grid-cols-3 select-none touch-pan-y ${
+            isDragging.current ? "" : "transition-transform duration-500 ease-out md:transition-none"
+          }`}
+          style={{ transform: `translateX(calc(-${index} * (100% + 0.75rem) + ${dragOffsetPct}%))` }}
+          onTouchStart={e => onDragStart(e.touches[0].clientX)}
+          onTouchMove={e => onDragMove(e.touches[0].clientX)}
+          onTouchEnd={onDragEnd}
+          onMouseDown={e => onDragStart(e.clientX)}
+          onMouseMove={e => { if (isDragging.current) onDragMove(e.clientX) }}
+          onMouseUp={onDragEnd}
+          onMouseLeave={() => { if (isDragging.current) onDragEnd() }}
+          onClickCapture={onTrackClickCapture}
         >
           {banners.map((banner) => {
             const gradient = GRADIENT_MAP[banner.color] ?? GRADIENT_MAP.dark
@@ -132,7 +221,7 @@ export function PromoStrip() {
                   <img
                     src={banner.imageUrl}
                     alt={banner.title || banner.tag}
-                    className="w-full h-full object-cover aspect-[4/3] md:aspect-video"
+                    className="w-full h-full object-contain aspect-[4/3] md:aspect-video bg-muted"
                   />
                 </Link>
               )
