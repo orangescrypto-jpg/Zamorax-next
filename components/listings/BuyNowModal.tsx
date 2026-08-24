@@ -116,6 +116,16 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   } | null>(null)
   const [offerLoading, setOfferLoading] = useState(true)
 
+  // Bulk-purchase-aware weight: delivery pricing must scale with how many
+  // units are actually being shipped, not just one unit's weight — buying
+  // 3x a 0.5kg item is 1.5kg in the box, not 0.5kg. Computed here (ahead of
+  // the ZLA/FBZ fee effects below) so both can use it. Mirrors the same
+  // "quantity wins unless an accepted offer fixes it" rule effectiveQty
+  // uses further down, since an accepted offer's quantity is what's
+  // actually being shipped too.
+  const shippedQty = acceptedOffer ? Math.max(1, acceptedOffer.quantity ?? 1) : Math.max(1, quantity)
+  const totalWeightKg = (listing.weightKg ?? 0.5) * shippedQty
+
   useEffect(() => {
     if (!open || !user?.uid) { setOfferLoading(false); return }
     setOfferLoading(true)
@@ -127,8 +137,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
 
   const [street, setStreet] = useState("")
   const [city,   setCity]   = useState("")
-  const [state,  setState]  = useState("")
-  const [lga,    setLga]    = useState("")
+  const [state,  setState]  = useState("")const [lga,    setLga]    = useState("")
 
   // FBZ Express is only offered when BOTH are true: admin has FBZ enabled
   // platform-wide (settings.fbzEnabled) AND this specific listing's stock
@@ -207,7 +216,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
           const pricing = await LogisticsService.getPricing()
           const feeBreakdown = LogisticsService.calculateFee(
             listing.nigerianState!, state, pricing,
-            { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
+            { weightKg: totalWeightKg, isFragile: listing.isFragile, isDoorstep },
           )
           if (!cancelled) { setZlaFee(feeBreakdown.total); setZlaBreakdown(feeBreakdown) }
         }
@@ -216,7 +225,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
       }
     })()
     return () => { cancelled = true }
-  }, [zlaOffered, zlaAvailable, state, isDoorstep])
+  }, [zlaOffered, zlaAvailable, state, isDoorstep, totalWeightKg])
 
   // FBZ Express fee — same zone-based LogisticsService pricing used across
   // the app, dispatched from the nearest active FBZ warehouse (not the
@@ -238,7 +247,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
         // state, never the seller's own state.
         const feeBreakdown = await LogisticsService.getFbzDeliveryFee(
           warehouse.state, state,
-          { weightKg: listing.weightKg, isFragile: listing.isFragile, isDoorstep },
+          { weightKg: totalWeightKg, isFragile: listing.isFragile, isDoorstep },
         )
         if (!cancelled) { setFbzFee(feeBreakdown.total); setFbzBreakdown(feeBreakdown) }
       } catch {
@@ -246,7 +255,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
       }
     })()
     return () => { cancelled = true }
-  }, [fbzAvailable, state, isDoorstep])
+  }, [fbzAvailable, state, isDoorstep, totalWeightKg])
 
   // Single last-used address, auto-overwritten on each successful order.
   // Prefills the address step so returning buyers don't re-type it, but
@@ -269,7 +278,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
   // over deriving one here — re-multiplying a per-unit price that was
   // itself rounded from a tier total can drift by a few kobo whenever the
   // tier's total doesn't divide evenly by its minQty.
-  const effectiveQty  = acceptedOffer ? Math.max(1, acceptedOffer.quantity ?? 1) : Math.max(1, quantity)
+  const effectiveQty  = shippedQty
   const unitPriceKobo = acceptedOffer ? Math.round(acceptedOffer.agreedPrice / effectiveQty) : listing.priceSale
   const itemPriceKobo = acceptedOffer
     ? acceptedOffer.agreedPrice
@@ -835,7 +844,7 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
                               <span>{bd.base > 0 ? formatPrice(bd.base) : "Free"}</span>
                             </div>
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span>Weight fee ({listing.weightKg ?? 0.5}kg)</span>
+                              <span>Weight fee ({totalWeightKg}kg)</span>
                               <span>{bd.weightSurcharge > 0 ? formatPrice(bd.weightSurcharge) : "Free"}</span>
                             </div>
                             {isDoorstep && (
