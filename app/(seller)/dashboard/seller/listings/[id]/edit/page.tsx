@@ -39,13 +39,14 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
     city: "", nigerianState: "", deliveryNationwide: false,
     stockQty: "", estimatedDeliveryDays: "",
     minOrderQty: "", unitOfSale: "piece", offersEnabled: true,
-    lowStockThreshold: "",
+    lowStockThreshold: "", weightKg: "",
   })
   // Standing discount — plain permanent price cut, no code/expiry. Kept
   // separate from `form` since discountPercent is only meaningful while
   // enabled is true (same pattern used for bulkPricing above).
   const [standingDiscountEnabled, setStandingDiscountEnabled] = useState(false)
   const [standingDiscountPercent, setStandingDiscountPercent] = useState("")
+  const [standingDiscountApplyToBulk, setStandingDiscountApplyToBulk] = useState(false)
   // Delivery methods this listing offers — same shape as the posting flow's
   // Step5bShipment (shippingMethods array on the listing). Kept separate
   // from `form` since it's an array, not a scalar field.
@@ -89,9 +90,11 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         unitOfSale: data.unitOfSale || "piece",
         offersEnabled: data.offersEnabled !== false,
         lowStockThreshold: data.lowStockThreshold != null ? String(data.lowStockThreshold) : "",
+        weightKg: data.weightKg != null ? String(data.weightKg) : "",
       })
       setStandingDiscountEnabled(!!data.standingDiscount)
       setStandingDiscountPercent(data.standingDiscount?.discountPercent != null ? String(data.standingDiscount.discountPercent) : "")
+      setStandingDiscountApplyToBulk(!!data.standingDiscount?.applyToBulk)
       setBulkPricing(
         Array.isArray(data.bulkPricing)
           ? data.bulkPricing.map((t: { minQty: number; price: number }) => ({
@@ -184,8 +187,16 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
         unitOfSale: form.unitOfSale || "piece",
         offersEnabled: form.offersEnabled,
         lowStockThreshold: form.lowStockThreshold.trim() !== "" ? parseInt(form.lowStockThreshold) : undefined,
+        // If the seller leaves this blank, default to 0.5kg rather than
+        // sending nothing — an unset weight would otherwise fall through
+        // to BuyNowModal/CartCheckoutModal's own `?? 0.5` fallback only at
+        // checkout time, which works but leaves the stored listing itself
+        // with no real weight on record. Setting it here means the value
+        // is correct everywhere (admin listing view, exports, etc.), not
+        // just wherever a fallback happens to be coded.
+        weightKg: form.weightKg.trim() !== "" ? parseFloat(form.weightKg) : 0.5,
         standingDiscount: standingDiscountEnabled && standingDiscountPercent.trim() !== ""
-          ? { discountPercent: parseInt(standingDiscountPercent) }
+          ? { discountPercent: parseInt(standingDiscountPercent), applyToBulk: standingDiscountApplyToBulk }
           : null,
         bulkPricing: bulkPricing
           .filter(t => t.minQty.trim() !== "" && t.price.trim() !== "")
@@ -342,25 +353,48 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
                 checked={standingDiscountEnabled}
                 onCheckedChange={(v) => {
                   setStandingDiscountEnabled(v)
-                  if (!v) setStandingDiscountPercent("")
+                  if (!v) {
+                    setStandingDiscountPercent("")
+                    setStandingDiscountApplyToBulk(false)
+                  }
                 }}
               />
             </div>
             {standingDiscountEnabled && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Discount percentage</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={standingDiscountPercent}
-                  onChange={(e) => setStandingDiscountPercent(e.target.value)}
-                  placeholder="e.g. 5"
-                />
-                {standingDiscountPercent.trim() !== "" && form.priceSale.trim() !== "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Buyers will see ₦{Math.round(parseFloat(form.priceSale) * (1 - parseInt(standingDiscountPercent || "0") / 100)).toLocaleString()} instead of ₦{Number(form.priceSale).toLocaleString()}.
-                  </p>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Discount percentage</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={standingDiscountPercent}
+                    onChange={(e) => setStandingDiscountPercent(e.target.value)}
+                    placeholder="e.g. 5"
+                  />
+                  {standingDiscountPercent.trim() !== "" && form.priceSale.trim() !== "" && (
+                    <p className="text-xs text-muted-foreground">
+                      Buyers will see ₦{Math.round(parseFloat(form.priceSale) * (1 - parseInt(standingDiscountPercent || "0") / 100)).toLocaleString()} instead of ₦{Number(form.priceSale).toLocaleString()}.
+                    </p>
+                  )}
+                </div>
+
+                {/* Only shown when this listing actually has bulk pricing
+                    tiers filled in below — a discount toggle for a feature
+                    the listing doesn't use would just be confusing. Off by
+                    default: a bulk tier is often already a negotiated
+                    bundle price the seller may not want stacked with this
+                    discount. */}
+                {bulkPricing.some(t => t.minQty.trim() !== "" && t.price.trim() !== "") && (
+                  <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                    <div className="pr-3">
+                      <Label className="text-xs">Apply to bulk pricing too</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Also discount your bulk-price tiers by {standingDiscountPercent || "—"}%, not just the single-piece price.
+                      </p>
+                    </div>
+                    <Switch checked={standingDiscountApplyToBulk} onCheckedChange={setStandingDiscountApplyToBulk} />
+                  </div>
                 )}
               </div>
             )}
@@ -664,6 +698,23 @@ export default function EditListingPage({ params }: { params: Promise<{ id: stri
             />
             <p className="text-xs text-muted-foreground">
               Shown to buyers on your listing as a fast-delivery trust signal.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Package Weight (kg) <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Input
+              type="number"
+              step="0.1"
+              min="0.1"
+              value={form.weightKg}
+              onChange={set("weightKg")}
+              placeholder="0.5"
+              className="max-w-[200px]"
+            />
+            <p className="text-xs text-muted-foreground">
+              Used to calculate delivery fees. Leave blank to use the default (0.5kg) — for bulk orders,
+              this is multiplied by the quantity being bought.
             </p>
           </div>
         </CardContent>
