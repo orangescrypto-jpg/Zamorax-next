@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Zap, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ListingsService } from "@/src/services"
 import { formatPrice } from "@/lib/utils"
@@ -60,9 +61,11 @@ export function FlashDealBadge({ listing }: { listing: Listing }) {
 export function CreateFlashDealModal({ listing, open, onClose }: { listing: Listing; open: boolean; onClose: () => void }) {
   const [discount, setDiscount] = useState("10")
   const [hours, setHours] = useState("24")
+  const [applyToBulk, setApplyToBulk] = useState(false)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
   const alreadyActive = ListingsService.isFlashDealActive(listing)
+  const hasBulkPricing = Array.isArray(listing.bulkPricing) && listing.bulkPricing.length > 0
   // Guard against a missing/undefined price so the modal shows ₦0 instead of
   // NaN if listing data is ever incomplete, rather than silently breaking.
   const price = listing.priceSale || 0
@@ -71,7 +74,7 @@ export function CreateFlashDealModal({ listing, open, onClose }: { listing: List
   const handleCreate = async () => {
     setLoading(true)
     try {
-      await ListingsService.createFlashDeal(listing.id, Number(discount), Number(hours))
+      await ListingsService.createFlashDeal(listing.id, Number(discount), Number(hours), applyToBulk)
       toast({ title: "Flash Deal Live! ⚡", description: `${discount}% off for ${hours} hours.`, variant: "success" })
       onClose()
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }) }
@@ -103,6 +106,11 @@ export function CreateFlashDealModal({ listing, open, onClose }: { listing: List
             <div className="space-y-3">
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                 ⚡ Flash deal active — {listing.flashDeal.discountPercent}% off
+                {hasBulkPricing && (
+                  <span className="block text-xs mt-1 text-red-600/80">
+                    {listing.flashDeal.applyToBulk ? "Also applied to bulk pricing tiers." : "Not applied to bulk pricing tiers."}
+                  </span>
+                )}
               </div>
               <Button variant="destructive" className="w-full" onClick={handleCancel} disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><X className="h-4 w-4 mr-2" />Cancel Flash Deal</>}
@@ -130,6 +138,24 @@ export function CreateFlashDealModal({ listing, open, onClose }: { listing: List
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Only shown when this listing actually has bulk pricing
+                  tiers set — otherwise there's nothing for the toggle to
+                  affect. Off by default: a bulk tier is often already a
+                  negotiated bundle price the seller may not want stacked
+                  with this flash discount. */}
+              {hasBulkPricing && (
+                <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                  <div className="pr-3">
+                    <p className="text-sm font-medium">Apply to bulk pricing too</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Also discount your bulk-price tiers by {discount}%, not just the single-piece price.
+                    </p>
+                  </div>
+                  <Switch checked={applyToBulk} onCheckedChange={setApplyToBulk} />
+                </div>
+              )}
+
               <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-center">
                 <p className="text-xs text-red-600">Flash Price</p>
                 <p className="text-2xl font-bold text-red-600">{formatPrice(flashPrice)}</p>
