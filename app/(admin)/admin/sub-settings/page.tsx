@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, Save, ArrowLeft, ListChecks, Settings2, Sparkles, ShoppingCart } from "lucide-react"
+import { Loader2, Save, ArrowLeft, ListChecks, Settings2, Sparkles, ShoppingCart, Truck } from "lucide-react"
 import {
   DEFAULT_SUB_SETTINGS,
   type SubSettings,
@@ -248,6 +248,40 @@ export default function AdminSubSettingsPage() {
               value={s.cartAbandonmentThresholdHours}
               onChange={num("cartAbandonmentThresholdHours")}
               min={1} max={168} step={1}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Free Delivery ─────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Truck className="h-4 w-4 text-primary" />
+            Free Delivery
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Shows a "Free Delivery" row on the homepage, pulling any listing where the
+            seller/admin set the delivery fee override to 0 (the same flag behind the
+            "Free Delivery" badge on listing cards). The full list is always browsable at
+            <span className="font-mono"> /free-delivery</span> — this toggle only controls
+            the homepage preview row.
+          </p>
+          <ToggleRow
+            label="Free delivery section"
+            desc="Shows a horizontally scrollable row of free-delivery listings on the homepage"
+            checked={s.freeDeliveryEnabled}
+            onChange={bool("freeDeliveryEnabled")}
+          />
+          {s.freeDeliveryEnabled && (
+            <NumField
+              label="Number of listings shown"
+              desc="How many free-delivery listings to show on the homepage row (1–20)"
+              value={s.freeDeliveryCount}
+              onChange={num("freeDeliveryCount")}
+              min={1} max={20} step={1}
             />
           )}
         </CardContent>
