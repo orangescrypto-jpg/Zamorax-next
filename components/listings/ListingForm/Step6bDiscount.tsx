@@ -22,6 +22,8 @@ export function Step6bDiscount() {
   const enabled = watch("standingDiscountEnabled")
   const priceSale = watch("priceSale")
   const discountPercent = watch("standingDiscountPercent")
+  const bulkPricing = watch("bulkPricing")
+  const hasBulkPricing = Array.isArray(bulkPricing) && bulkPricing.length > 0
 
   const previewPrice = enabled && priceSale && discountPercent
     ? Math.round(priceSale * (1 - discountPercent / 100))
@@ -47,7 +49,10 @@ export function Step6bDiscount() {
               checked={!!field.value}
               onCheckedChange={(v) => {
                 field.onChange(v)
-                if (!v) setValue("standingDiscountPercent", undefined)
+                if (!v) {
+                  setValue("standingDiscountPercent", undefined)
+                  setValue("standingDiscountApplyToBulk", false)
+                }
               }}
             />
           )}
@@ -88,6 +93,29 @@ export function Step6bDiscount() {
               <p className="text-xs text-foreground">
                 Buyers will see <strong>₦{previewPrice.toLocaleString()}</strong> instead of ₦{Number(priceSale).toLocaleString()} — automatically, no code needed.
               </p>
+            </div>
+          )}
+
+          {/* Only shown when this listing actually has bulk pricing tiers —
+              a discount toggle for a feature the listing doesn't use would
+              just be confusing. Off by default: a bulk tier is often
+              already a negotiated bundle price the seller may not want
+              stacked with this discount. */}
+          {hasBulkPricing && (
+            <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+              <div className="pr-3">
+                <Label className="text-sm">Apply to bulk pricing too</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Also discount your bulk-price tiers by the same {discountPercent || "—"}%, not just the single-piece price.
+                </p>
+              </div>
+              <Controller
+                name="standingDiscountApplyToBulk"
+                control={control}
+                render={({ field }) => (
+                  <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                )}
+              />
             </div>
           )}
         </div>
