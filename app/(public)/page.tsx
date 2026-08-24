@@ -13,8 +13,10 @@ import { CategoryGrid }       from "@/components/home/CategoryGrid"
 import { HowItWorks }         from "@/components/home/HowItWorks"
 import { FlashDealsSection }  from "@/components/home/FlashDealsSection"
 import { PromoStrip }         from "@/components/home/PromoStrip"
+import { FlashSaleListingsSection } from "@/components/home/FlashSaleListingsSection"
 import { FeaturedListings }   from "@/components/home/FeaturedListings"
 import { ZamoraxDirectSection } from "@/components/home/ZamoraxDirectSection"
+import { FreeDeliverySection } from "@/components/home/FreeDeliverySection"
 import { GroupBuySection }    from "@/components/home/GroupBuySection"
 import { CategoryListings }   from "@/components/home/CategoryListings"
 import { RecentlyViewedRow }  from "@/components/home/RecentlyViewedRow"
@@ -72,6 +74,12 @@ export default function HomePage() {
         {/* 5 — Promo banners — editorial / category spotlights */}
         <PromoStrip />
 
+        {/* 5.5 — Flash Sale — individual seller listings currently running
+            a flashDeal discount (per-listing, set by the seller). Separate
+            from FlashDealsSection above, which is the admin-managed banner
+            row. Same data source as the /flash-deals page it links to. */}
+        <FlashSaleListingsSection />
+
         {/* 6 — Featured / Boosted Listings */}
         {settings.homepageFeaturedListingsEnabled && <FeaturedListings onLoaded={setFeaturedIds} />}
 
@@ -83,6 +91,11 @@ export default function HomePage() {
             normal search) — onLoaded feeds excludeIds below so the same
             item doesn't render twice back-to-back on the homepage. */}
         <ZamoraxDirectSection onLoaded={setDirectIds} />
+
+        {/* 6.7 — Free Delivery — listings with delivery fee override = 0.
+            Admin-toggled at /admin/sub-settings (freeDeliveryEnabled /
+            freeDeliveryCount); full list always at /free-delivery. */}
+        <FreeDeliverySection />
 
         {/* 7 — Live listings by category */}
         <CategoryListings excludeIds={[...featuredIds, ...directIds]} />
