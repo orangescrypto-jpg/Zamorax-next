@@ -228,6 +228,7 @@ export const ListingsService: IListingsService = {
     if (data.standingDiscount !== undefined) {
       patch.standing_discount_enabled = data.standingDiscount ? 1 : 0
       patch.standing_discount_percent = data.standingDiscount?.discountPercent ?? null
+      patch.standing_discount_apply_to_bulk = data.standingDiscount?.applyToBulk ? 1 : 0
     }
     await AdminService.updateDoc("listings", id, patch)
   },
@@ -273,10 +274,10 @@ export const ListingsService: IListingsService = {
     return this.getListingsByIds(ids)
   },
 
-  async createFlashDeal(listingId, discountPercent, hours) {
+  async createFlashDeal(listingId, discountPercent, hours, applyToBulk) {
     const expiresAt = new Date(Date.now() + hours * 3600000).toISOString()
     await AdminService.updateDoc("listings", listingId, {
-      flash_deal:    JSON.stringify({ discountPercent, expiresAt, createdAt: new Date().toISOString() }),
+      flash_deal:    JSON.stringify({ discountPercent, expiresAt, createdAt: new Date().toISOString(), applyToBulk: !!applyToBulk }),
       is_flash_deal: 1,
     })
   },
