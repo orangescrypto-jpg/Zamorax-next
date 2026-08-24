@@ -351,7 +351,11 @@ export function ListingDetailClient({ id, initialListing }: Props) {
     listing?.bulkPricing,
     listing?.priceSale ?? 0,
     quantity,
-    flashActive && listing?.flashDeal ? listing.flashDeal.discountPercent : null
+    flashActive && listing?.flashDeal?.applyToBulk
+      ? listing.flashDeal.discountPercent
+      : standingDiscountActive && listing?.standingDiscount?.applyToBulk
+        ? listing.standingDiscount.discountPercent
+        : null
   )
   // Per-unit price for display purposes only (e.g. price cards, cart line
   // items that expect a unit price rather than a resolved total). Not used
