@@ -1,200 +1,136 @@
 "use client"
 
-// components/home/FlashSaleListingsSection.tsx
-// Homepage preview row for individual seller listings that have a live
-// flashDeal (Listing.flashDeal — set per-listing by the seller, see
-// src/types/index.ts). This is deliberately a *separate* section from
-// FlashDealsSection.tsx, which is the admin-managed banner/slider fed by
-// the standalone "flashDeals" collection — that one stays exactly as is.
-//
-// This section instead mirrors the query used on the full /flash-deals
-// page (active listings with a non-null, non-expired flashDeal) so the
-// homepage preview always matches what buyers find when they tap "See all".
-// Same horizontal swipe-carousel pattern as ZamoraxDirectSection.tsx.
-
-import { AdminService, where, orderBy, onSnapshot } from "@/src/services"
-import { useEffect, useRef, useState } from "react"
+import { AdminService, where, orderBy } from "@/src/services"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Flame, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react"
-import { ListingCard } from "@/components/listings/ListingCard"
-import { ListingsService } from "@/src/services"
-import type { Listing } from "@/src/types"
+import Image from "next/image"
+import { Flame, Clock, ArrowRight, Zap } from "lucide-react"
+import { formatPrice } from "@/lib/utils"
+import { toDate } from "@/lib/toDate"
+import { usePlatformSettings } from "@/hooks/usePlatformSettings"
 
-// Auto-slide interval — same rhythm as PromoStrip's Featured Deals slider
-const AUTOPLAY_MS = 3500
-// How long to stay paused after the user manually touches/scrolls before
-// autoplay resumes, so it doesn't yank the row away mid-swipe.
-const RESUME_DELAY_MS = 4000
+interface FlashDeal {
+  id: string
+  listingId: string
+  title: string
+  image: string
+  originalPrice: number
+  dealPrice: number
+  discountPercent: number
+  endsAt: any
+  sold: number
+  stock: number
+}
 
-export function FlashSaleListingsSection() {
-  const [listings, setListings] = useState<Listing[]>([])
-  const [loading, setLoading] = useState(true)
-  const scrollerRef = useRef<HTMLDivElement>(null)
-  const [scrollPct, setScrollPct] = useState(0)
-  const [canScroll, setCanScroll] = useState(false)
-  const autoplayRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pausedRef = useRef(false)
+function useCountdown(endsAt: Date | null) {
+  const [timeLeft, setTimeLeft] = useState("")
 
   useEffect(() => {
-    const q = AdminService._ref_("listings", [
-      where("isActive", "==", true),
-      where("flashDeal", "!=", null),
-      orderBy("flashDeal"),
-    ])
-    const unsub = onSnapshot(
-      q,
-      (docs: any) => {
-        const active = docs.docs
-          .map((d: any) => ({ id: d.id, ...d.data() }))
-          .filter((d: any) => d.flashDeal && d.flashDeal.expiresAt && new Date(
-            typeof d.flashDeal.expiresAt === "string" ? d.flashDeal.expiresAt : d.flashDeal.expiresAt.toDate?.() ?? d.flashDeal.expiresAt
-          ).getTime() > Date.now())
-        setListings(active)
+    if (!endsAt) return
+    const tick = () => {
+      const diff = endsAt.getTime() - Date.now()
+      if (diff <= 0) { setTimeLeft("Ended"); return }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setTimeLeft(`${h}h ${m}m ${s}s`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [endsAt])
+
+  return timeLeft
+}
+
+function DealCard({ deal }: { deal: FlashDeal }) {
+  const endsAt = deal.endsAt ? toDate(deal.endsAt) : null
+  const countdown = useCountdown(endsAt)
+  const soldPct = Math.min(100, Math.round((deal.sold / deal.stock) * 100))
+
+  return (
+    <Link
+      href={`/listings/${deal.listingId}`}
+      className="group flex-shrink-0 w-44 sm:w-52 rounded-2xl overflow-hidden bg-card border border-border hover:border-primary/40 hover:shadow-lg transition-all"
+    >
+      <div className="relative h-36 bg-muted overflow-hidden">
+        {deal.image ? (
+          <Image src={deal.image} alt={deal.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="208px" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Zap className="h-8 w-8 text-muted-foreground/30" />
+          </div>
+        )}
+        <div className="absolute top-2 left-2 bg-primary text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+          -{deal.discountPercent}%
+        </div>
+      </div>
+      <div className="p-3 space-y-1.5">
+        <p className="text-xs font-semibold line-clamp-2 leading-snug">{deal.title}</p>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-sm font-black text-primary">{formatPrice(deal.dealPrice)}</span>
+          <span className="text-[10px] text-muted-foreground line-through">{formatPrice(deal.originalPrice)}</span>
+        </div>
+        <div className="space-y-1">
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${soldPct}%` }} />
+          </div>
+          <p className="text-[10px] text-muted-foreground">{deal.sold} sold · {deal.stock - deal.sold} left</p>
+        </div>
+        {countdown && (
+          <div className="flex items-center gap-1 text-[10px] text-orange-500 font-medium">
+            <Clock className="h-3 w-3" />{countdown}
+          </div>
+        )}
+      </div>
+    </Link>
+  )
+}
+
+export function FlashDealsSection() {
+  const { settings } = usePlatformSettings()
+  const [deals, setDeals] = useState<FlashDeal[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!settings.flashDealsEnabled) return
+    const now = new Date()
+    const unsub = AdminService.subscribeToCollection(
+      "flashDeals",
+      docs => {
+        const active = (docs as any[])
+          .filter(d => d.endsAt && toDate(d.endsAt) > now && d.stock > d.sold)
+        setDeals(active)
         setLoading(false)
       },
-      () => setLoading(false)
+      [where("status", "==", "active"), orderBy("endsAt", "asc")]
     )
     return unsub
-  }, [])
+  }, [settings.flashDealsEnabled])
 
-  useEffect(() => {
-    const el = scrollerRef.current
-    if (!el || listings.length === 0) return
-    const check = () => {
-      const maxScroll = el.scrollWidth - el.clientWidth
-      setCanScroll(maxScroll > 4)
-      setScrollPct(maxScroll > 4 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0)
-    }
-    check()
-    window.addEventListener("resize", check)
-    return () => window.removeEventListener("resize", check)
-  }, [listings])
-
-  if (loading || listings.length === 0) return null
-
-  const updateScrollState = () => {
-    const el = scrollerRef.current
-    if (!el) return
-    const maxScroll = el.scrollWidth - el.clientWidth
-    setCanScroll(maxScroll > 4)
-    setScrollPct(maxScroll > 4 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0)
-  }
-
-  const scrollByCards = (dir: 1 | -1) => {
-    const el = scrollerRef.current
-    if (!el) return
-    const card = el.querySelector<HTMLElement>("[data-carousel-card]")
-    const step = card ? card.offsetWidth + 12 : el.clientWidth * 0.46
-    el.scrollBy({ left: dir * step, behavior: "smooth" })
-  }
-
-  // Autoplay — advances one card at a time, looping back to the start once
-  // it reaches the end. Only runs when the row actually overflows and
-  // isn't currently paused by user interaction.
-  useEffect(() => {
-    if (!canScroll) return
-    autoplayRef.current = setInterval(() => {
-      if (pausedRef.current) return
-      const el = scrollerRef.current
-      if (!el) return
-      const maxScroll = el.scrollWidth - el.clientWidth
-      if (el.scrollLeft >= maxScroll - 4) {
-        el.scrollTo({ left: 0, behavior: "smooth" })
-      } else {
-        scrollByCards(1)
-      }
-    }, AUTOPLAY_MS)
-    return () => { if (autoplayRef.current) clearInterval(autoplayRef.current) }
-  }, [canScroll, listings.length])
-
-  // Pause autoplay on manual touch/drag/wheel, resume a few seconds after
-  // the user stops interacting — same "swipe still works" feel as any
-  // standard product carousel.
-  const pauseAutoplay = () => {
-    pausedRef.current = true
-    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
-    resumeTimeoutRef.current = setTimeout(() => { pausedRef.current = false }, RESUME_DELAY_MS)
-  }
-
-  useEffect(() => {
-    return () => { if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current) }
-  }, [])
+  if (!settings.flashDealsEnabled) return null
+  if (loading || deals.length === 0) return null
 
   return (
     <section>
-      <div className="flex items-start justify-between mb-4 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 bg-primary/10 rounded-lg shrink-0">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-primary/10 rounded-lg">
             <Flame className="h-4 w-4 text-primary" />
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              <h2 className="text-base font-bold text-foreground truncate">Flash Sale</h2>
-              <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full animate-pulse">
-                LIVE
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">Limited-time discounts from sellers</p>
-          </div>
+          <h2 className="text-base font-bold text-foreground">Flash Deals</h2>
+          <span className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full animate-pulse">
+            LIVE
+          </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {canScroll && (
-            <div className="hidden sm:flex items-center gap-1">
-              <button
-                type="button"
-                aria-label="Scroll left"
-                onClick={() => { pauseAutoplay(); scrollByCards(-1) }}
-                disabled={scrollPct <= 0.02}
-                className="h-7 w-7 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                aria-label="Scroll right"
-                onClick={() => { pauseAutoplay(); scrollByCards(1) }}
-                disabled={scrollPct >= 0.98}
-                className="h-7 w-7 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-          <Link href="/flash-deals" className="text-xs text-primary font-medium flex items-center gap-0.5 whitespace-nowrap">
-            See all <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
+        <Link href="/flash-deals" className="text-xs text-primary font-medium flex items-center gap-0.5">
+          See all <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
 
-      <div
-        ref={scrollerRef}
-        onScroll={updateScrollState}
-        onTouchStart={pauseAutoplay}
-        onMouseDown={pauseAutoplay}
-        onWheel={pauseAutoplay}
-        className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 sm:mx-0 sm:px-0"
-      >
-        {listings.map(l => (
-          <div key={l.id} data-carousel-card className="shrink-0 w-[46%] sm:w-[220px] snap-start">
-            <ListingCard
-              listing={{
-                ...l,
-                priceSale: ListingsService.getFlashPrice(l.priceSale as number, (l.flashDeal as any).discountPercent),
-              }}
-            />
-          </div>
-        ))}
+      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+        {deals.map(deal => <DealCard key={deal.id} deal={deal} />)}
       </div>
-
-      {canScroll && (
-        <div className="mt-2 h-1 rounded-full bg-muted overflow-hidden max-w-[120px] mx-auto sm:mx-0">
-          <div
-            className="h-full bg-primary/60 rounded-full transition-transform duration-150 ease-out"
-            style={{ width: "40%", transform: `translateX(${scrollPct * 150}%)` }}
-          />
-        </div>
-      )}
     </section>
   )
 }
