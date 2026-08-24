@@ -1,16 +1,22 @@
-// app/api/listings/official/route.ts
-// Public endpoint — no auth required. Returns active listings belonging to
-// official Zamorax-owned sellers (e.g. "Zamorax Enterprises Ltd" — bulk-
-// sourced, locally warehoused stock). "Official" is a flag on the seller
-// (users.is_official), not on the listing — see migration 0002 — so this
-// route joins listings to users rather than reading a per-listing column.
+// app/api/listings/featured/route.ts
+// Public endpoint — no auth required. Returns listings shown in the
+// homepage "Featured Listings" section: paid boosts (listings.is_boosted,
+// set by /api/boosts/activate after Paystack payment) PLUS listings admin
+// manually picked to feature (listings.is_zamorax_pick), regardless of
+// payment. This is NOT the same as "official seller" — being sold by an
+// official/Zamorax-owned seller (users.is_official) does not by itself
+// earn a spot here.
+//
+// FIX: this route previously included `u.is_official = 1` in the WHERE
+// clause, so every listing from an official seller showed up in Featured
+// for free, whether or not it was boosted or admin-picked. Featured is
+// meant to be paid-placement-or-admin-curated only; official-seller
+// listings belong to the separate "Zamorax Direct" section
+// (see app/api/listings/official) unless they're also boosted/picked.
 //
 // Supports optional query params:
-//   ?limit=N        cap results (homepage section uses the admin-configured
-//                    homepageZamoraxDirectCount; the dedicated /zamorax-direct
-//                    page can omit this or pass a larger page size)
-//   ?category=slug  filter to one category (used by the per-category
-//                    "Zamorax Direct only" toggle)
+//   ?limit=N        cap results
+//   ?category=slug  filter to one category
 export const dynamic = "force-dynamic"
 
 import { NextRequest, NextResponse } from "next/server"
@@ -60,9 +66,9 @@ function rowToListing(row: Record<string, unknown>) {
       try { return row.delivery_options ? JSON.parse(row.delivery_options as string) : (row.shipping_methods ? JSON.parse(row.shipping_methods as string) : undefined) }
       catch { return undefined }
     })(),
-    // True either because the seller itself is official (Zamorax
-    // Enterprises), or because admin picked this specific listing to
-    // showcase here — both cases render identically in Zamorax Direct.
+    // Official/Zamorax-pick badges can still show on a featured card if the
+    // seller happens to also be official — that's just informational styling,
+    // not what determined inclusion in this list (is_boosted did).
     isOfficial:     !!row.is_official_seller || !!row.is_zamorax_pick,
     isZamoraxPick:  !!row.is_zamorax_pick,
     flashDeal,
@@ -92,7 +98,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   try {
     const conditions: string[] = [
       "l.status = 'active'",
-      "(u.is_official = 1 OR l.is_zamorax_pick = 1)",
+      "(l.is_boosted = 1 OR l.is_zamorax_pick = 1)",
     ]
     const params: unknown[] = []
 
@@ -107,7 +113,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       `SELECT l.*, u.is_official AS is_official_seller FROM listings l
        JOIN users u ON u.uid = l.seller_id
        WHERE ${conditions.join(" AND ")}
-       ORDER BY l.is_boosted DESC, l.created_at DESC
+       ORDER BY l.created_at DESC
        LIMIT ?`,
       params,
       nativeDB,
@@ -116,7 +122,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const listings = ((rows as any)?.results ?? []).map((r: any) => rowToListing(r))
     return NextResponse.json({ listings })
   } catch (err: any) {
-    console.error("[listings/official]", err)
+    console.error("[listings/featured]", err)
     return NextResponse.json({ listings: [], _debugError: err?.message ?? String(err) })
   }
 }
