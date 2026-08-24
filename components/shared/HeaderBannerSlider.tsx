@@ -32,6 +32,14 @@ export function HeaderBannerSlider() {
   const [loading, setLoading] = useState(true)
   const [index, setIndex] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  const dragStartX = useRef(0)
+  const dragDeltaX = useRef(0)
+  const isDragging = useRef(false)
+  const suppressClick = useRef(false)
+  const [dragOffsetPct, setDragOffsetPct] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -59,34 +67,104 @@ export function HeaderBannerSlider() {
     if (index >= banners.length) setIndex(0)
   }, [banners, index])
 
+  const startAutoplay = () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (banners.length > 1) {
+      timerRef.current = setInterval(() => {
+        setIndex(i => (i + 1) % banners.length)
+      }, AUTOPLAY_MS)
+    }
+  }
+
   // Autoplay — only runs with more than one slide, pauses cleanly on unmount
   useEffect(() => {
-    if (banners.length <= 1) return
-    timerRef.current = setInterval(() => {
-      setIndex(i => (i + 1) % banners.length)
-    }, AUTOPLAY_MS)
+    startAutoplay()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [banners.length])
 
-  if (loading || banners.length === 0) return null
+  useEffect(() => {
+    return () => { if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current) }
+  }, [])
 
   const goTo = (i: number) => {
     setIndex(i)
     // Restart the autoplay countdown from a manual dot tap so it doesn't
     // immediately jump again right after the user picked one.
+    startAutoplay()
+  }
+
+  // Pause autoplay while dragging, resume a beat after release.
+  const pauseAutoplayForDrag = () => {
     if (timerRef.current) clearInterval(timerRef.current)
-    if (banners.length > 1) {
-      timerRef.current = setInterval(() => {
-        setIndex(cur => (cur + 1) % banners.length)
-      }, AUTOPLAY_MS)
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
+  }
+  const resumeAutoplaySoon = () => {
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
+    resumeTimeoutRef.current = setTimeout(startAutoplay, 3000)
+  }
+
+  const onDragStart = (clientX: number) => {
+    isDragging.current = true
+    dragStartX.current = clientX
+    dragDeltaX.current = 0
+    pauseAutoplayForDrag()
+  }
+
+  const onDragMove = (clientX: number) => {
+    if (!isDragging.current || !trackRef.current) return
+    dragDeltaX.current = clientX - dragStartX.current
+    const widthPx = trackRef.current.clientWidth || 1
+    setDragOffsetPct((dragDeltaX.current / widthPx) * 100)
+  }
+
+  const onDragEnd = () => {
+    if (!isDragging.current) return
+    isDragging.current = false
+    const widthPx = trackRef.current?.clientWidth || 1
+    const draggedPct = dragDeltaX.current / widthPx
+
+    if (Math.abs(dragDeltaX.current) > 5) {
+      suppressClick.current = true
+    }
+
+    if (draggedPct <= -0.15 && index < banners.length - 1) {
+      setIndex(i => i + 1)
+    } else if (draggedPct >= 0.15 && index > 0) {
+      setIndex(i => i - 1)
+    } else if (draggedPct <= -0.15 && index === banners.length - 1) {
+      setIndex(0)
+    } else if (draggedPct >= 0.15 && index === 0) {
+      setIndex(banners.length - 1)
+    }
+
+    setDragOffsetPct(0)
+    resumeAutoplaySoon()
+  }
+
+  const onTrackClickCapture = (e: React.MouseEvent) => {
+    if (suppressClick.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      suppressClick.current = false
     }
   }
+
+  if (loading || banners.length === 0) return null
 
   return (
     <div className="relative w-full overflow-hidden">
       <div
-        className="flex transition-transform duration-500 ease-out"
-        style={{ transform: `translateX(-${index * 100}%)` }}
+        ref={trackRef}
+        className={`flex select-none touch-pan-y ${isDragging.current ? "" : "transition-transform duration-500 ease-out"}`}
+        style={{ transform: `translateX(calc(-${index * 100}% + ${dragOffsetPct}%))` }}
+        onTouchStart={e => onDragStart(e.touches[0].clientX)}
+        onTouchMove={e => onDragMove(e.touches[0].clientX)}
+        onTouchEnd={onDragEnd}
+        onMouseDown={e => onDragStart(e.clientX)}
+        onMouseMove={e => { if (isDragging.current) onDragMove(e.clientX) }}
+        onMouseUp={onDragEnd}
+        onMouseLeave={() => { if (isDragging.current) onDragEnd() }}
+        onClickCapture={onTrackClickCapture}
       >
         {banners.map(banner => {
           const bg   = banner.bgColor   || "#FF6B00"
