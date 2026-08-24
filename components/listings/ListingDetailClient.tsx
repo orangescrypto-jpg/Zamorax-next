@@ -745,8 +745,18 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                 <p className="text-[11px] text-muted-foreground">1 piece</p>
               </button>
               {listing.bulkPricing.map((tier: { minQty: number; price: number }, i: number) => {
-                const tierPrice = flashActive && listing.flashDeal
-                  ? ListingsService.getFlashPrice(tier.price, listing.flashDeal.discountPercent)
+                // Only discount this tier if the active discount actually
+                // has applyToBulk turned on — otherwise show the tier's
+                // plain price untouched, same rule the ₦ total math above
+                // (resolvedBulkPrice) already follows.
+                const bulkDiscountPercent =
+                  flashActive && listing.flashDeal?.applyToBulk
+                    ? listing.flashDeal.discountPercent
+                    : standingDiscountActive && listing.standingDiscount?.applyToBulk
+                      ? listing.standingDiscount.discountPercent
+                      : null
+                const tierPrice = bulkDiscountPercent
+                  ? ListingsService.getFlashPrice(tier.price, bulkDiscountPercent)
                   : tier.price
                 return (
                   <button
@@ -759,10 +769,10 @@ export function ListingDetailClient({ id, initialListing }: Props) {
                         : "border-border bg-muted/30 hover:border-primary/40"
                     }`}
                   >
-                    {flashActive && listing.flashDeal ? (
+                    {bulkDiscountPercent ? (
                       <>
                         <p className="text-[10px] text-muted-foreground line-through">{formatPrice(tier.price)}</p>
-                        <p className="text-sm font-bold text-red-600">{formatPrice(tierPrice)}</p>
+                        <p className={`text-sm font-bold ${flashActive ? "text-red-600" : "text-foreground"}`}>{formatPrice(tierPrice)}</p>
                       </>
                     ) : (
                       <p className="text-sm font-bold text-foreground">{formatPrice(tierPrice)}</p>
