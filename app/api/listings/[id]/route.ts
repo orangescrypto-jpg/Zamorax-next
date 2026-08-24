@@ -73,7 +73,7 @@ function rowToListing(row: Record<string, unknown>) {
       ? { code: String(row.coupon_code), discountPercent: Number(row.coupon_discount_percent ?? 0) }
       : null,
     standingDiscount:   row.standing_discount_enabled && row.standing_discount_percent
-      ? { discountPercent: Number(row.standing_discount_percent ?? 0) }
+      ? { discountPercent: Number(row.standing_discount_percent ?? 0), applyToBulk: !!row.standing_discount_apply_to_bulk }
       : null,
     vacationMode:       row.vacation_mode           ? !!row.vacation_mode          : undefined,
     vacationReturnDate: row.vacation_return_date    ? String(row.vacation_return_date) : undefined,
