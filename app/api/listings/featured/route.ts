@@ -39,7 +39,7 @@ function rowToListing(row: Record<string, unknown>) {
     : null
 
   const standingDiscount = row.standing_discount_enabled && row.standing_discount_percent
-    ? { discountPercent: Number(row.standing_discount_percent ?? 0) }
+    ? { discountPercent: Number(row.standing_discount_percent ?? 0), applyToBulk: !!row.standing_discount_apply_to_bulk }
     : null
 
   return {
