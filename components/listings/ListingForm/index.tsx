@@ -64,6 +64,7 @@ export function ListingForm() {
       shippingMethods: ["meetup"],
       couponEnabled: false,
       standingDiscountEnabled: false,
+      standingDiscountApplyToBulk: false,
       boostType: "none",
       // FIX: was defaulting to true, meaning sellers were silently
       // "pre-agreed" to the listing rules before ever seeing the checkbox.
@@ -256,6 +257,7 @@ export function ListingForm() {
         coupon_discount_percent: (couponsOn && data.couponEnabled) ? (data.couponDiscountPercent ?? null) : null,
         standing_discount_enabled: data.standingDiscountEnabled ? 1 : 0,
         standing_discount_percent: data.standingDiscountEnabled ? (data.standingDiscountPercent ?? null) : null,
+        standing_discount_apply_to_bulk: data.standingDiscountEnabled && data.standingDiscountApplyToBulk ? 1 : 0,
         status:               isFbzChosen ? "pending_fbz" : "pending",
         views:                0,
         saves:                0,
