@@ -15,6 +15,12 @@ import { usePlatformSettings } from "@/hooks/usePlatformSettings"
 import { ListingCard } from "@/components/listings/ListingCard"
 import type { Listing } from "@/src/types"
 
+// Auto-slide interval — same rhythm as PromoStrip/FlashSaleListingsSection
+const AUTOPLAY_MS = 3500
+// How long to stay paused after manual touch/drag/scroll before autoplay
+// resumes, so it doesn't yank the row away mid-swipe.
+const RESUME_DELAY_MS = 4000
+
 export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) => void } = {}) {
   const { settings } = usePlatformSettings()
   const [listings, setListings] = useState<Listing[]>([])
@@ -22,6 +28,9 @@ export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [scrollPct, setScrollPct] = useState(0)   // 0–1, how far through the row we've scrolled
   const [canScroll, setCanScroll] = useState(false) // whether content overflows at all
+  const autoplayRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const resumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pausedRef = useRef(false)
 
   const count = settings.homepageZamoraxDirectCount || 8
 
@@ -71,6 +80,37 @@ export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) 
     el.scrollBy({ left: dir * step, behavior: "smooth" })
   }
 
+  // Autoplay — advances one card at a time, looping back to the start once
+  // it reaches the end. Only runs when the row actually overflows and
+  // isn't currently paused by user interaction.
+  useEffect(() => {
+    if (!canScroll) return
+    autoplayRef.current = setInterval(() => {
+      if (pausedRef.current) return
+      const el = scrollerRef.current
+      if (!el) return
+      const maxScroll = el.scrollWidth - el.clientWidth
+      if (el.scrollLeft >= maxScroll - 4) {
+        el.scrollTo({ left: 0, behavior: "smooth" })
+      } else {
+        scrollByCards(1)
+      }
+    }, AUTOPLAY_MS)
+    return () => { if (autoplayRef.current) clearInterval(autoplayRef.current) }
+  }, [canScroll, listings.length])
+
+  // Pause autoplay on manual touch/drag/wheel, resume a few seconds after
+  // the user stops interacting.
+  const pauseAutoplay = () => {
+    pausedRef.current = true
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current)
+    resumeTimeoutRef.current = setTimeout(() => { pausedRef.current = false }, RESUME_DELAY_MS)
+  }
+
+  useEffect(() => {
+    return () => { if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current) }
+  }, [])
+
   return (
     <section>
       <div className="flex items-start justify-between mb-4 gap-2">
@@ -96,7 +136,7 @@ export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) 
               <button
                 type="button"
                 aria-label="Scroll left"
-                onClick={() => scrollByCards(-1)}
+                onClick={() => { pauseAutoplay(); scrollByCards(-1) }}
                 disabled={scrollPct <= 0.02}
                 className="h-7 w-7 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 disabled:pointer-events-none transition-colors"
               >
@@ -105,7 +145,7 @@ export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) 
               <button
                 type="button"
                 aria-label="Scroll right"
-                onClick={() => scrollByCards(1)}
+                onClick={() => { pauseAutoplay(); scrollByCards(1) }}
                 disabled={scrollPct >= 0.98}
                 className="h-7 w-7 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-30 disabled:pointer-events-none transition-colors"
               >
@@ -124,6 +164,9 @@ export function ZamoraxDirectSection({ onLoaded }: { onLoaded?: (ids: string[]) 
       <div
         ref={scrollerRef}
         onScroll={updateScrollState}
+        onTouchStart={pauseAutoplay}
+        onMouseDown={pauseAutoplay}
+        onWheel={pauseAutoplay}
         className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-1 -mx-4 px-4 sm:mx-0 sm:px-0"
       >
         {listings.map(l => (
