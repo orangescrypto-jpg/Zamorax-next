@@ -38,6 +38,14 @@ export interface SubSettings {
   // returning buyer with a dismissible banner instead of a server cron.
   cartAbandonmentEnabled: boolean
   cartAbandonmentThresholdHours: number   // how old an item must be to trigger the nudge
+
+  // ── Free Delivery homepage section — shows listings that have a
+  // per-listing delivery fee override of 0 (Listing.deliveryFeeOverrideKobo
+  // === 0, same flag that drives the "Free Delivery" badge on ListingCard).
+  // Master toggle + how many to show on the homepage row; the full list
+  // always lives at /free-delivery regardless of this toggle.
+  freeDeliveryEnabled: boolean
+  freeDeliveryCount: number   // how many to show on the homepage row (1–20)
 }
 
 export const DEFAULT_SUB_SETTINGS: SubSettings = {
@@ -49,6 +57,8 @@ export const DEFAULT_SUB_SETTINGS: SubSettings = {
   sponsoredListingsCount: 6,
   cartAbandonmentEnabled: true,
   cartAbandonmentThresholdHours: 24,
+  freeDeliveryEnabled: true,
+  freeDeliveryCount: 8,
 }
 
 let _cached: SubSettings | null = null
