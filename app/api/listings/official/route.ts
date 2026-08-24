@@ -50,6 +50,10 @@ function rowToListing(row: Record<string, unknown>) {
     images,
     status:         row.status,
     isBoosted:      !!row.is_boosted,
+    isFBZ:          !!row.is_fbz,
+    isHubVerified:  !!row.is_hub_verified,
+    deliveryFeeOverrideKobo: row.delivery_fee_override_kobo != null ? Number(row.delivery_fee_override_kobo) : null,
+    estimatedDeliveryDays: row.estimated_delivery_days ? String(row.estimated_delivery_days) : undefined,
     // True either because the seller itself is official (Zamorax
     // Enterprises), or because admin picked this specific listing to
     // showcase here — both cases render identically in Zamorax Direct.
