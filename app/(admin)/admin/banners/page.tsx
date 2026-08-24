@@ -70,7 +70,10 @@ export default function AdminBannersPage() {
   }, [])
 
   async function handleAdd() {
-    if (!newBanner.title.trim()) {
+    // If an image is uploaded, it replaces the tag/title/colors/icon
+    // entirely (see the "Banner image" hint text below) — so title is
+    // only required when building a text-based banner with no image.
+    if (!newBanner.imageUrl && !newBanner.title.trim()) {
       toast({ title: "Title is required", variant: "destructive" })
       return
     }
