@@ -94,6 +94,7 @@ export const listingSchema = z.object({
   // available (not gated on an admin sub-setting like coupons are).
   standingDiscountEnabled: z.boolean().optional(),
   standingDiscountPercent: z.number().int().min(1).max(90).optional(),
+  standingDiscountApplyToBulk: z.boolean().optional(),
 
   // Step 7: Boost
   boostType: z.enum(["none", "standard", "premium", "category_top"]).default("none"),
