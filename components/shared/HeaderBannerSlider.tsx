@@ -215,16 +215,19 @@ export function HeaderBannerSlider() {
         })}
       </div>
 
-      {/* Dots — only shown with more than one slide */}
+      {/* Dots — only shown with more than one slide. Slide backgrounds vary
+          from dark to near-white (like this "Buy More Save More" banner),
+          so pure white dots can vanish on light images — a small shadow +
+          semi-opaque backing keeps them visible on any background. */}
       {banners.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/20 backdrop-blur-sm">
           {banners.map((banner, i) => (
             <button
               key={banner.id}
               onClick={() => goTo(i)}
               aria-label={`Go to slide ${i + 1}`}
-              className={`h-1.5 rounded-full transition-all ${
-                i === index ? "w-5 bg-white" : "w-1.5 bg-white/50"
+              className={`h-1.5 rounded-full transition-all shadow-[0_0_2px_rgba(0,0,0,0.6)] ${
+                i === index ? "w-5 bg-white" : "w-1.5 bg-white/60"
               }`}
             />
           ))}
