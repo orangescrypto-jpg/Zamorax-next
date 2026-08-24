@@ -147,7 +147,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, step, sellerDoorstep])
+  }, [state, step, sellerDoorstep, cartItems])
 
   // FBZ Express fee — same zone-based LogisticsService pricing engine as
   // ZLA above, but "from" is the state of the nearest active FBZ warehouse
@@ -190,7 +190,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, step, sellerDoorstep])
+  }, [state, step, sellerDoorstep, cartItems])
 
   // Auto-select a sensible default delivery method per seller group.
   // FIX: this always defaulted every group to "meetup" regardless of
