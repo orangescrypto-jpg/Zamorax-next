@@ -137,7 +137,8 @@ export function BuyNowModal({ open, onClose, listing, seller, quantity = 1, reso
 
   const [street, setStreet] = useState("")
   const [city,   setCity]   = useState("")
-  const [state,  setState]  = useState("")const [lga,    setLga]    = useState("")
+  const [state,  setState]  = useState("")
+  const [lga,    setLga]    = useState("")
 
   // FBZ Express is only offered when BOTH are true: admin has FBZ enabled
   // platform-wide (settings.fbzEnabled) AND this specific listing's stock
