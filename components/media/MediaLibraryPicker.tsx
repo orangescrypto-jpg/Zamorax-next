@@ -32,10 +32,17 @@ interface MediaLibraryPickerProps {
   // Filter to a specific upload context, e.g. "listing" or "blog_cover".
   // Omitted = show everything the user has ever uploaded.
   context?: string
+  // When true, also pulls in image_url values from the site_banners table
+  // (any placement) so images uploaded before media_library-logging existed
+  // still show up here instead of forcing a re-upload. Site banners have no
+  // per-user secrecy (see PUBLIC_TABLES in the d1/query route), so this
+  // shows every distinct image ever attached to a banner, not just the
+  // current admin's.
+  includeSiteBanners?: boolean
 }
 
 export function MediaLibraryPicker({
-  open, onOpenChange, onSelect, multiple = false, onSelectMultiple, context,
+  open, onOpenChange, onSelect, multiple = false, onSelectMultiple, context, includeSiteBanners = false,
 }: MediaLibraryPickerProps) {
   const { user } = useAuth()
   const [items, setItems]     = useState<MediaItem[]>([])
@@ -51,15 +58,53 @@ export function MediaLibraryPicker({
       { field: "createdAt", dir: "desc" },
       { limit: 100 },
     ]
-    AdminService.getCollection("media_library", constraints)
-      .then(docs => {
+
+    const loaders: Promise<MediaItem[]>[] = [
+      AdminService.getCollection("media_library", constraints).then(docs => {
         let rows = docs as unknown as MediaItem[]
         if (context) rows = rows.filter(r => r.context === context)
-        setItems(rows)
+        return rows
+      }),
+    ]
+
+    if (includeSiteBanners) {
+      // Backfill: pull every distinct image ever attached to a site banner,
+      // including ones uploaded before media_library-logging was added, so
+      // they still show up as reusable here instead of being lost.
+      loaders.push(
+        AdminService.getCollection("site_banners", [{ field: "order", dir: "asc" }, { limit: 200 }])
+          .then(rows => {
+            const banners = rows as unknown as { id: string; imageUrl?: string | null; mediaType?: string; title?: string | null }[]
+            const seen = new Set<string>()
+            const out: MediaItem[] = []
+            for (const b of banners) {
+              if (!b.imageUrl || seen.has(b.imageUrl)) continue
+              seen.add(b.imageUrl)
+              out.push({
+                id: `site_banner_${b.id}`,
+                userId: user.uid,
+                url: b.imageUrl,
+                fileName: b.title || null,
+                context: "site_banner_backfill",
+              })
+            }
+            return out
+          })
+          .catch(() => [])
+      )
+    }
+
+    Promise.all(loaders)
+      .then(([logged, backfilled = []]) => {
+        // Dedupe by URL — a banner already logged in media_library
+        // shouldn't also appear via the site_banners backfill.
+        const seen = new Set(logged.map(r => r.url))
+        const merged = [...logged, ...backfilled.filter(r => !seen.has(r.url))]
+        setItems(merged)
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false))
-  }, [open, user?.uid, context])
+  }, [open, user?.uid, context, includeSiteBanners])
 
   if (!open) return null
 
