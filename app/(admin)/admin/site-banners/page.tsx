@@ -18,10 +18,12 @@ import { useAuth } from "@/hooks/useAuth"
 import { StorageService } from "@/src/services"
 import imageCompression from "browser-image-compression"
 import { Loader2, Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown, Upload, ImageIcon, X } from "lucide-react"
+import { recordMediaUpload } from "@/lib/mediaLibrary"
+import { MediaLibraryPicker } from "@/components/media/MediaLibraryPicker"
 
 interface SiteBanner {
   id: string
-  placement: "header" | "header_slider" | "footer"
+  placement: "header" | "header_slider" | "footer" | "footer_slider"
   title: string
   subtitle: string
   ctaLabel: string
@@ -34,7 +36,7 @@ interface SiteBanner {
   order: number
 }
 
-const EMPTY = (placement: "header" | "header_slider" | "footer"): Omit<SiteBanner, "id"> => ({
+const EMPTY = (placement: "header" | "header_slider" | "footer" | "footer_slider"): Omit<SiteBanner, "id"> => ({
   placement,
   title: "",
   subtitle: "",
@@ -50,7 +52,7 @@ const EMPTY = (placement: "header" | "header_slider" | "footer"): Omit<SiteBanne
 
 export default function AdminSiteBannersPage() {
   const { toast } = useToast()
-  const [tab, setTab] = useState<"header" | "header_slider" | "footer">("header")
+  const [tab, setTab] = useState<"header" | "header_slider" | "footer" | "footer_slider">("header")
   const [banners, setBanners] = useState<SiteBanner[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -143,7 +145,10 @@ export default function AdminSiteBannersPage() {
           slideshow) shown at the very top of the homepage — add multiple
           active banners here and they'll auto-rotate with dots. The footer
           banner is a normal-sized promo card shown above the footer on every
-          page. Turn a banner off, or leave none active, and it simply won't
+          page — it always shows a single fixed banner. The footer slider
+          sits just above the footer banner and rotates through multiple
+          active banners automatically, with dots for manual navigation.
+          Turn a banner off, or leave none active, and it simply won't
           appear — no empty space is left behind.
         </p>
       </div>
@@ -152,24 +157,25 @@ export default function AdminSiteBannersPage() {
         ✅ Changes go live instantly — no redeploy needed.
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "header" | "header_slider" | "footer")}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "header" | "header_slider" | "footer" | "footer_slider")}>
         <TabsList>
           <TabsTrigger value="header">Header Strip</TabsTrigger>
           <TabsTrigger value="header_slider">Header Slider</TabsTrigger>
           <TabsTrigger value="footer">Footer Banner</TabsTrigger>
+          <TabsTrigger value="footer_slider">Footer Slider</TabsTrigger>
         </TabsList>
 
         <TabsContent value={tab} className="space-y-4 mt-4">
           <div className="flex justify-end">
             <Button onClick={() => setAdding(true)} className="bg-primary text-white gap-2">
-              <Plus className="h-4 w-4" /> Add {tab === "header" ? "Header" : tab === "header_slider" ? "Slider" : "Footer"} Banner
+              <Plus className="h-4 w-4" /> Add {tab === "header" ? "Header" : tab === "header_slider" ? "Header Slider" : tab === "footer_slider" ? "Footer Slider" : "Footer"} Banner
             </Button>
           </div>
 
           {adding && (
             <Card className="border-primary/30 shadow-md">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">New {tab === "header" ? "Header Strip" : tab === "header_slider" ? "Header Slider" : "Footer"} Banner</CardTitle>
+                <CardTitle className="text-base">New {tab === "header" ? "Header Strip" : tab === "header_slider" ? "Header Slider" : tab === "footer_slider" ? "Footer Slider" : "Footer"} Banner</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <BannerForm banner={draft} onChange={setDraft} placement={tab} />
@@ -218,11 +224,12 @@ function BannerForm({
   banner, onChange, placement }: {
   banner: Omit<SiteBanner, "id">
   onChange: (b: Omit<SiteBanner, "id">) => void
-  placement: "header" | "header_slider" | "footer"
+  placement: "header" | "header_slider" | "footer" | "footer_slider"
 }) {
   const { toast } = useToast()
   const { user } = useAuth()
   const [uploading, setUploading] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const set = (k: keyof Omit<SiteBanner, "id">) => (v: unknown) => onChange({ ...banner, [k]: v })
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,6 +253,7 @@ function BannerForm({
         const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.${ext}`
         const result = await StorageService.uploadFile(raw, path)
         onChange({ ...banner, imageUrl: result.url, mediaType: "video" })
+        recordMediaUpload({ userId: user.uid, url: result.url, path, fileName: raw.name, context: `site_banner_${placement}` })
         toast({ title: "Video uploaded ✅" })
         return
       }
@@ -269,6 +277,7 @@ function BannerForm({
       const path = `site-banners/${placement}/${user.uid}/${Date.now()}_${raw.name.replace(/\.[^/.]+$/, "")}.${ext}`
       const result = await StorageService.uploadFile(file, path)
       onChange({ ...banner, imageUrl: result.url, mediaType: "image" })
+      recordMediaUpload({ userId: user.uid, url: result.url, path, fileName: raw.name, context: `site_banner_${placement}` })
       toast({ title: "Image uploaded ✅" })
     } catch (err: any) {
       toast({ title: "Upload failed", description: err?.message, variant: "destructive" })
@@ -291,7 +300,9 @@ function BannerForm({
             ? "Upload a pre-made wide strip image or video (recommended ~1500×120px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."
             : placement === "header_slider"
               ? "Upload a pre-made wide slide image or video (recommended ~1600×500px). Add several active slides here and they'll auto-rotate with dots, like a Jumia-style homepage slider. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically. Keep videos under 25MB."
-              : "Upload a pre-made banner image or video (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."}
+              : placement === "footer_slider"
+                ? "Upload a pre-made banner image or video (recommended ~1200×400px). Add several active slides here and they'll auto-rotate with dots, shown just above the fixed footer banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."
+                : "Upload a pre-made banner image or video (recommended ~1200×400px) instead of building a text banner. If you upload one, it replaces the title/subtitle/colors below — only the Link URL still applies. GIFs and videos are supported and play automatically."}
         </p>
 
         {banner.imageUrl ? (
@@ -325,18 +336,37 @@ function BannerForm({
             </button>
           </div>
         ) : (
-          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg py-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
-            {uploading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            ) : (
-              <>
-                <Upload className="h-6 w-6 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Click to upload an image or video</span>
-              </>
-            )}
-            <input type="file" accept="image/*,video/*" className="hidden" disabled={uploading} onChange={handleImageUpload} />
-          </label>
+          <div className="space-y-2">
+            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg py-6 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+              {uploading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              ) : (
+                <>
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Click to upload an image or video</span>
+                </>
+              )}
+              <input type="file" accept="image/*,video/*" className="hidden" disabled={uploading} onChange={handleImageUpload} />
+            </label>
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="flex items-center justify-center gap-1.5 w-full text-xs font-medium text-primary hover:underline py-1"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              Choose from my uploads
+            </button>
+          </div>
         )}
+
+        <MediaLibraryPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={(url) => {
+            const isVideo = /\.(mp4|mov|webm)$/i.test(url)
+            onChange({ ...banner, imageUrl: url, mediaType: isVideo ? "video" : "image" })
+          }}
+        />
       </div>
 
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${banner.imageUrl ? "opacity-50 pointer-events-none" : ""}`}>
@@ -388,7 +418,7 @@ function BannerCard({
   banner, placement, isFirst, isLast, saving,
   onSave, onDelete, onMove, onToggle }: {
   banner: SiteBanner
-  placement: "header" | "header_slider" | "footer"
+  placement: "header" | "header_slider" | "footer" | "footer_slider"
   isFirst: boolean
   isLast: boolean
   saving: boolean
