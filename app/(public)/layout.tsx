@@ -3,6 +3,7 @@ import { CategoryTabBar } from "@/components/layout/CategoryTabBar"
 import { Footer } from "@/components/layout/Footer"
 import { BottomNav } from "@/components/layout/BottomNav"
 import { FooterBanner } from "@/components/shared/FooterBanner"
+import { FooterBannerSlider } from "@/components/shared/FooterBannerSlider"
 import { CartAbandonmentReminder } from "@/components/cart/CartAbandonmentReminder"
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <main className="flex-1 pt-16">
         {children}
       </main>
+      <FooterBannerSlider />
       <FooterBanner />
       <Footer />
       <BottomNav />
