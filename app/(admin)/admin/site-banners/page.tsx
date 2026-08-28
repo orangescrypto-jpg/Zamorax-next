@@ -158,12 +158,14 @@ export default function AdminSiteBannersPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "header" | "header_slider" | "footer" | "footer_slider")}>
-        <TabsList>
-          <TabsTrigger value="header">Header Strip</TabsTrigger>
-          <TabsTrigger value="header_slider">Header Slider</TabsTrigger>
-          <TabsTrigger value="footer">Footer Banner</TabsTrigger>
-          <TabsTrigger value="footer_slider">Footer Slider</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max sm:w-full">
+            <TabsTrigger value="header" className="whitespace-nowrap">Header Strip</TabsTrigger>
+            <TabsTrigger value="header_slider" className="whitespace-nowrap">Header Slider</TabsTrigger>
+            <TabsTrigger value="footer" className="whitespace-nowrap">Footer Banner</TabsTrigger>
+            <TabsTrigger value="footer_slider" className="whitespace-nowrap">Footer Slider</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value={tab} className="space-y-4 mt-4">
           <div className="flex justify-end">
@@ -362,6 +364,7 @@ function BannerForm({
         <MediaLibraryPicker
           open={pickerOpen}
           onOpenChange={setPickerOpen}
+          includeSiteBanners
           onSelect={(url) => {
             const isVideo = /\.(mp4|mov|webm)$/i.test(url)
             onChange({ ...banner, imageUrl: url, mediaType: isVideo ? "video" : "image" })
