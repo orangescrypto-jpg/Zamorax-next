@@ -14,7 +14,7 @@ import Link from "next/link"
 
 interface SiteBanner {
   id: string
-  placement: "header" | "footer"
+  placement: "header" | "header_slider" | "footer" | "footer_slider"
   title?: string
   subtitle?: string
   ctaLabel?: string
@@ -39,7 +39,7 @@ export function FooterBanner() {
         const res = await fetch("/api/site-banners?placement=footer", { cache: "no-store" })
         const json = await res.json()
         if (!active) return
-        setBanner((json?.banners?.[0] as SiteBanner) ?? null)
+        setBanner((json?.banners?.[0] as SiteBanner) ?? null) // "footer" placement = single fixed banner
       } catch {
         if (active) setBanner(null)
       } finally {
