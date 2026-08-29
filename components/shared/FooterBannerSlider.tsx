@@ -80,6 +80,18 @@ export function FooterBannerSlider() {
   const [loading, setLoading] = useState(true)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  const dragStartX = useRef(0)
+  const dragStartY = useRef(0)
+  const dragDeltaX = useRef(0)
+  const isDragging = useRef(false)
+  const suppressClick = useRef(false)
+  // Once a touch sequence is confirmed horizontal, we call preventDefault()
+  // on subsequent touchmoves so the browser stops trying to vertically
+  // scroll the page mid-swipe — see the manual non-passive listener below.
+  const horizontalLock = useRef(false)
+  const [dragOffsetPct, setDragOffsetPct] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -122,6 +134,77 @@ export function FooterBannerSlider() {
     return () => clearInterval(timer)
   }, [banners.length, paused, next])
 
+  const onDragStart = (clientX: number, clientY = 0) => {
+    isDragging.current = true
+    dragStartX.current = clientX
+    dragStartY.current = clientY
+    dragDeltaX.current = 0
+    horizontalLock.current = false
+    setPaused(true)
+  }
+
+  const onDragMove = (clientX: number, clientY = 0) => {
+    if (!isDragging.current || !trackRef.current) return
+    dragDeltaX.current = clientX - dragStartX.current
+    const deltaY = clientY - dragStartY.current
+
+    // Decide direction once, after a few px of movement, so a tap doesn't
+    // false-trigger and a genuine vertical scroll isn't hijacked.
+    if (!horizontalLock.current && (Math.abs(dragDeltaX.current) > 8 || Math.abs(deltaY) > 8)) {
+      horizontalLock.current = Math.abs(dragDeltaX.current) > Math.abs(deltaY)
+    }
+
+    const widthPx = trackRef.current.clientWidth || 1
+    setDragOffsetPct((dragDeltaX.current / widthPx) * 100)
+  }
+
+  const onDragEnd = () => {
+    if (!isDragging.current) return
+    isDragging.current = false
+    horizontalLock.current = false
+    const widthPx = trackRef.current?.clientWidth || 1
+    const draggedPct = dragDeltaX.current / widthPx
+
+    if (Math.abs(dragDeltaX.current) > 5) {
+      suppressClick.current = true
+    }
+
+    if (draggedPct <= -0.15) {
+      goTo(index + 1)
+    } else if (draggedPct >= 0.15) {
+      goTo(index - 1)
+    }
+
+    setDragOffsetPct(0)
+    setPaused(false)
+  }
+
+  const onTrackClickCapture = (e: React.MouseEvent) => {
+    if (suppressClick.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      suppressClick.current = false
+    }
+  }
+
+  // React binds touchmove as a passive listener by default, which silently
+  // ignores preventDefault(). Bind it manually as non-passive so we can
+  // actually stop the page's vertical scroll once a horizontal swipe is
+  // detected — otherwise the browser wins the gesture on most mobile
+  // browsers and the drag never visibly moves the slider on touch devices.
+  useEffect(() => {
+    const el = trackRef.current
+    if (!el) return
+    const handleTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0]
+      if (!touch) return
+      onDragMove(touch.clientX, touch.clientY)
+      if (horizontalLock.current && e.cancelable) e.preventDefault()
+    }
+    el.addEventListener("touchmove", handleTouchMove, { passive: false })
+    return () => el.removeEventListener("touchmove", handleTouchMove)
+  }, [banners.length])
+
   if (loading || banners.length === 0) return null
 
   return (
@@ -129,14 +212,18 @@ export function FooterBannerSlider() {
       <div
         className="relative"
         onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-        onTouchStart={() => setPaused(true)}
-        onTouchEnd={() => setPaused(false)}
+        onMouseLeave={() => { setPaused(false); if (isDragging.current) onDragEnd() }}
       >
-        <div className="overflow-hidden rounded-2xl">
+        <div ref={trackRef} className="overflow-hidden rounded-2xl">
           <div
-            className="flex transition-transform duration-500 ease-out"
-            style={{ transform: `translateX(-${index * 100}%)` }}
+            className={`flex select-none touch-pan-y ${isDragging.current ? "" : "transition-transform duration-500 ease-out"}`}
+            style={{ transform: `translateX(calc(-${index * 100}% + ${dragOffsetPct}%))` }}
+            onTouchStart={e => onDragStart(e.touches[0].clientX, e.touches[0].clientY)}
+            onTouchEnd={onDragEnd}
+            onMouseDown={e => onDragStart(e.clientX)}
+            onMouseMove={e => { if (isDragging.current) onDragMove(e.clientX) }}
+            onMouseUp={onDragEnd}
+            onClickCapture={onTrackClickCapture}
           >
             {banners.map((banner) => (
               <div key={banner.id} className="w-full shrink-0">
