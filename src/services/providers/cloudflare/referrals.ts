@@ -28,7 +28,7 @@ export const ReferralsService: IReferralsService = {
   },
 
   getReferralLink(userId) {
-    const base = typeof window !== "undefined" ? window.location.origin : "https://zamorax.ng"
+    const base = typeof window !== "undefined" ? window.location.origin : "https://zamorax.com"
     return `${base}?ref=${userId}`
   },
 
