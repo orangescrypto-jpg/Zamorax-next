@@ -162,7 +162,7 @@ ${order.trackingNumber ? `
 <div class="footer">
   <p>
     Thank you for trading safely on Zamorax.<br/>
-    For support: support@zamorax.ng · zamorax.ng<br/>
+    For support: support@zamorax.com · zamorax.com<br/>
     This receipt was automatically generated and is valid without a signature.
   </p>
 </div>
