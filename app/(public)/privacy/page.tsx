@@ -33,7 +33,7 @@ const DEFAULT_HTML = `
   </section>
   <section class="space-y-4">
     <h2 class="text-xl font-semibold">5. Your Rights</h2>
-    <p>Under NDPR, you have the right to access, correct, or delete your data. Contact us at privacy@zamorax.ng to exercise your rights.</p>
+    <p>Under NDPR, you have the right to access, correct, or delete your data. Contact us at privacy@zamorax.com to exercise your rights.</p>
   </section>
   <section class="space-y-4">
     <h2 class="text-xl font-semibold">6. Contact</h2>
