@@ -4,7 +4,7 @@ import { AdminService } from "@/src/services/admin"
 import type { MetadataRoute } from "next"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamorax.ng"
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://zamorax.com"
   const now  = new Date()
 
   const staticRoutes: MetadataRoute.Sitemap = [
