@@ -40,8 +40,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = listing.description
     ? `${listing.description.slice(0, 155)}...`
     : `Buy ${listing.title} in ${listing.city || listing.nigerianState || "Nigeria"} on Zamorax. Verified seller. Escrow protected.`
-  const image       = listing.images?.[0] || "https://zamorax.ng/og-default.jpg"
-  const url         = `https://zamorax.ng/listings/${id}`
+  const image       = listing.images?.[0] || "https://zamorax.com/og-default.jpg"
+  const url         = `https://zamorax.com/listings/${id}`
   const price       = ((listing.priceSale || 0) / 100).toFixed(2)
   const ogImageUrl  = image
 
@@ -88,14 +88,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function ListingJsonLd({ listing }: { listing: Listing }) {
   const price = ((listing.priceSale || 0) / 100).toFixed(2)
-  const url   = `https://zamorax.ng/listings/${listing.id}`
+  const url   = `https://zamorax.com/listings/${listing.id}`
+  // Google's Product rich-result validator rejects an empty `image` array,
+  // so fall back to the site default rather than omitting the field.
+  const images = listing.images && listing.images.length > 0
+    ? listing.images
+    : ["https://zamorax.com/og-default.jpg"]
 
   const schema = {
     "@context":  "https://schema.org",
     "@type":     "Product",
     name:        listing.title,
     description: listing.description || "",
-    image:       listing.images || [],
+    image:       images,
     url,
     offers: {
       "@type":       "Offer",
