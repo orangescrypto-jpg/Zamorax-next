@@ -591,7 +591,7 @@ const DEFAULTS: Settings = {
   socialInstagramUrl: "",
   socialLinkedInUrl: "",
   socialWhatsAppNumber: "2348000000000",
-  contactEmail: "hello@zamorax.ng",
+  contactEmail: "hello@zamorax.com",
   contactAddress: "",
   contactPhone: "",
   supportHours: "Monday–Saturday: 9AM–6PM WAT",
@@ -2178,7 +2178,7 @@ export default function AdminSettingsPage() {
         <StrField label="Instagram URL" value={s.socialInstagramUrl} onChange={str("socialInstagramUrl")} placeholder="https://instagram.com/zamorax" />
         <StrField label="LinkedIn URL" value={s.socialLinkedInUrl} onChange={str("socialLinkedInUrl")} placeholder="https://linkedin.com/company/zamorax" />
         <StrField label="WhatsApp (social footer link)" desc="Digits only with country code" value={s.socialWhatsAppNumber} onChange={str("socialWhatsAppNumber")} placeholder="2348012345678" />
-        <StrField label="Contact Email" value={s.contactEmail} onChange={str("contactEmail")} placeholder="hello@zamorax.ng" />
+        <StrField label="Contact Email" value={s.contactEmail} onChange={str("contactEmail")} placeholder="hello@zamorax.com" />
         <StrField
           label="Office / Business Address"
           desc="Shown on the /contact page info card"
