@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const RESEND_API = "https://api.resend.com/emails"
-const FROM = "Zamorax <notifications@zamorax.ng>"
+const FROM = "Zamorax <notifications@zamorax.com>"
 
 type EmailTemplate = "order_confirmed" | "payment_received" | "dispute_opened" | "order_delivered" | "payout_sent"
 
