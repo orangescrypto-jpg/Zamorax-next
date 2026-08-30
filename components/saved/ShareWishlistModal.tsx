@@ -46,7 +46,7 @@ export function ShareWishlistModal({ open, onOpenChange, listingIds, listName }:
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       })
 
-      const url = `${process.env.NEXT_PUBLIC_APP_URL || "https://zamorax.ng"}/wishlist/${shareId}`
+      const url = `${process.env.NEXT_PUBLIC_APP_URL || "https://zamorax.com"}/wishlist/${shareId}`
       setShareUrl(url)
     } catch {
       toast({ title: "Could not generate link", variant: "destructive" })
