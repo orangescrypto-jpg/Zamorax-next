@@ -109,7 +109,7 @@ export default function PublicTrackingPage() {
               </p>
               <p className="text-sm text-muted-foreground">
                 Need help? Contact us at{" "}
-                <a href="mailto:support@zamorax.ng" className="text-primary underline">support@zamorax.ng</a>
+                <a href="mailto:support@zamorax.com" className="text-primary underline">support@zamorax.com</a>
               </p>
             </CardContent>
           </Card>
@@ -252,7 +252,7 @@ export default function PublicTrackingPage() {
             {/* Support */}
             <p className="text-center text-xs text-muted-foreground">
               Need help with your shipment?{" "}
-              <a href="mailto:logistics@zamorax.ng" className="text-primary underline">logistics@zamorax.ng</a>
+              <a href="mailto:logistics@zamorax.com" className="text-primary underline">logistics@zamorax.com</a>
               {" "}or{" "}
               <a href="tel:+2348000000000" className="text-primary underline flex-inline items-center gap-0.5">
                 <Phone className="h-3 w-3 inline" /> 0800-ZAMORAX
