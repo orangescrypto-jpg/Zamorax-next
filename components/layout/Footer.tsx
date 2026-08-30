@@ -20,7 +20,7 @@ const SOCIAL_DEFAULTS: SocialSettings = {
   socialInstagramUrl: "",
   socialLinkedInUrl: "",
   socialWhatsAppNumber: "2348000000000",
-  contactEmail: "hello@zamorax.ng",
+  contactEmail: "hello@zamorax.com",
 }
 
 export function Footer() {
