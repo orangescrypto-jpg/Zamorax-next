@@ -42,7 +42,7 @@ const DEFAULT_HTML = `
   </section>
   <section class="space-y-4">
     <h2 class="text-xl font-semibold">Report a Problem</h2>
-    <p>See something suspicious? Use the "Report" button on any listing or contact us at safety@zamorax.ng</p>
+    <p>See something suspicious? Use the "Report" button on any listing or contact us at safety@zamorax.com</p>
   </section>
 </div>
 `
