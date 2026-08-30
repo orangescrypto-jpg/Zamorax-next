@@ -28,7 +28,7 @@ const DEFAULT_HTML = `
   </section>
   <section class="space-y-4">
     <h2 class="text-xl font-semibold">Contact</h2>
-    <p>Questions about cookies? Email us at privacy@zamorax.ng</p>
+    <p>Questions about cookies? Email us at privacy@zamorax.com</p>
   </section>
 </div>
 `
