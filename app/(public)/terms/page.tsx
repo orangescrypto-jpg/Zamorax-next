@@ -45,7 +45,7 @@ const DEFAULT_HTML = `
   </section>
   <section class="space-y-4">
     <h2 class="text-xl font-semibold">8. Contact</h2>
-    <p>Legal enquiries: legal@zamorax.ng</p>
+    <p>Legal enquiries: legal@zamorax.com</p>
   </section>
 </div>
 `
