@@ -457,7 +457,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   socialInstagramUrl: "",
   socialLinkedInUrl: "",
   socialWhatsAppNumber: "",
-  contactEmail: "hello@zamorax.ng",
+  contactEmail: "hello@zamorax.com",
   contactAddress: "",
   contactPhone: "",
   supportHours: "Monday–Saturday: 9AM–6PM WAT",
