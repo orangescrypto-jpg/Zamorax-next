@@ -4,8 +4,8 @@
 // Saves to Firestore: config/fees (read by useFeeSettings across all components).
 //
 // WHAT THIS PAGE CONTROLS:
-//   Seller fees  → commission (sale + rental), arbitration pool %, withdrawal fee
-//   Buyer fee    → optional convenience/processing fee at checkout
+//   Seller fees  → commission (sale + rental) + optional cap, arbitration pool %, withdrawal fee
+//   Buyer fee    → escrow fee % + optional cap, charged at checkout alongside the seller's cut
 
 import { adminFetch } from "@/lib/admin-fetch"
 //
@@ -20,7 +20,9 @@ import { adminFetch } from "@/lib/admin-fetch"
 //   insuranceRate stored as decimal: 0.5 = 0.5%  (small enough that whole number
 //   feels misleading to admin, so we keep decimal but show as % in the UI)
 //   withdrawalFee in KOBO (admin enters naira, we multiply × 100)
-//   buyerConvenienceFee in KOBO (same)
+//   sellerEscrowFeeCapKobo / buyerEscrowFeeCapKobo in KOBO — 0 entered by admin
+//   means "no cap" for that side; any positive amount caps that side's fee.
+//   buyerEscrowFeePercent stored as whole number, same convention as commissionSale.
 
 import { useEffect, useState } from "react"
 import { invalidateFeeCache } from "@/hooks/useFeeSettings"
@@ -80,6 +82,14 @@ function InfoBox({
 
 // ─── Live Preview helper ──────────────────────────────────────────────────────
 
+// Small local helper for the ₦100,000 example line in the buyer fee card —
+// mirrors applyCap() from feeSettings.ts (0/negative cap = uncapped) without
+// importing the whole calculateFees machinery for a one-line example.
+function applyPreviewCap(feeKobo: number, capKobo: number): number {
+  if (!capKobo || capKobo <= 0) return feeKobo
+  return Math.min(feeKobo, capKobo)
+}
+
 function LivePreview({ fees }: { fees: FeeSettings }) {
   const EXAMPLE_KOBO = 5000000  // ₦50,000 example order
   const b = calculateFees(EXAMPLE_KOBO, "sale", fees)
@@ -96,13 +106,19 @@ function LivePreview({ fees }: { fees: FeeSettings }) {
         </div>
         {b.buyerConvenienceKobo > 0 && (
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground pl-3">↳ {fees.buyerFeeLabel}</span>
+            <span className="text-muted-foreground pl-3">
+              ↳ {fees.buyerFeeLabel} ({b.buyerEscrowFeePct.toFixed(1)}%)
+              {b.buyerFeeCapped && <span className="text-amber-600"> · capped</span>}
+            </span>
             <span className="text-muted-foreground">+{formatPrice(b.buyerConvenienceKobo)}</span>
           </div>
         )}
         <Separator />
         <div className="flex justify-between text-destructive text-xs">
-          <span>Commission deducted from seller ({b.commissionPct.toFixed(1)}%)</span>
+          <span>
+            Commission deducted from seller ({b.commissionPct.toFixed(1)}%)
+            {b.sellerFeeCapped && <span className="text-amber-600"> · capped</span>}
+          </span>
           <span>-{formatPrice(b.commissionKobo)}</span>
         </div>
         <div className="flex justify-between text-destructive text-xs">
@@ -119,8 +135,8 @@ function LivePreview({ fees }: { fees: FeeSettings }) {
           <span className="text-accent">{formatPrice(b.sellerPayoutKobo)}</span>
         </div>
         <div className="flex justify-between font-bold text-xs">
-          <span className="text-muted-foreground">Platform revenue (commission only)</span>
-          <span>{formatPrice(b.commissionKobo)}</span>
+          <span className="text-muted-foreground">Platform revenue (both sides' fees)</span>
+          <span>{formatPrice(b.commissionKobo + b.buyerConvenienceKobo)}</span>
         </div>
       </div>
     </div>
@@ -254,6 +270,34 @@ export default function AdminFeesPage() {
             </div>
           </div>
 
+          {/* Seller escrow fee cap */}
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Seller Fee Cap</Label>
+            <p className="text-xs text-muted-foreground">
+              Maximum commission ever taken on a single order, no matter how large.
+              Set to ₦0 for no cap (pure percentage).
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">₦</span>
+              <Input
+                type="number"
+                value={fees.sellerEscrowFeeCapKobo / 100}
+                onChange={e => setFees(p => ({
+                  ...p,
+                  sellerEscrowFeeCapKobo: Math.round(parseFloat(e.target.value || "0") * 100),
+                }))}
+                step={100}
+                min={0}
+                className="max-w-[120px]"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {fees.sellerEscrowFeeCapKobo > 0
+                ? `Capped at ₦${(fees.sellerEscrowFeeCapKobo / 100).toLocaleString()} per order`
+                : "No cap — commission scales with order size"}
+            </p>
+          </div>
+
           <Separator />
 
           {/* Arbitration pool */}
@@ -311,25 +355,27 @@ export default function AdminFeesPage() {
         </CardContent>
       </Card>
 
-      {/* ── Buyer Convenience Fee ──────────────────────────────────────────── */}
+      {/* ── Buyer Escrow Fee ──────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Wallet className="h-4 w-4 text-primary" />
-            Buyer Convenience Fee
+            Buyer Escrow Fee
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
 
           <InfoBox color="blue">
-            A small flat fee added to the buyer's checkout total. Frame it as a "processing fee"
-            not a platform fee — buyers accept this more easily. Keep it under ₦200.
-            Leave disabled at launch and enable once you have transaction volume.
+            The buyer's share of the escrow/platform fee — the counterpart to the seller's
+            commission above. Percentage-based, with its own optional cap. A common split is
+            roughly half the total fee on each side (e.g. 0.6% buyer / 0.6% seller for a 1.2%
+            total), which stays competitive against gateways like Paystack (1.5% + ₦100) while
+            keeping both sides feeling the split is fair.
           </InfoBox>
 
           <ToggleRow
-            label="Enable buyer convenience fee"
-            desc="When off, buyers pay exactly the item price — no extra charges"
+            label="Enable buyer escrow fee"
+            desc="When off, buyers pay exactly the item price — the seller's commission is the only fee"
             checked={fees.buyerFeeEnabled}
             onChange={() => setFees(p => ({ ...p, buyerFeeEnabled: !p.buyerFeeEnabled }))}
           />
@@ -337,25 +383,49 @@ export default function AdminFeesPage() {
           {fees.buyerFeeEnabled && (
             <>
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Fee Amount</Label>
+                <Label className="text-sm font-medium">Buyer Escrow Fee %</Label>
                 <p className="text-xs text-muted-foreground">
-                  Flat fee added to every order total (in Naira)
+                  % of item price added to every order total
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={fees.buyerEscrowFeePercent}
+                    onChange={e => setFees(p => ({ ...p, buyerEscrowFeePercent: Number(e.target.value) }))}
+                    step={0.1}
+                    min={0}
+                    max={10}
+                    className="max-w-[120px]"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Buyer Fee Cap</Label>
+                <p className="text-xs text-muted-foreground">
+                  Maximum escrow fee ever charged to the buyer on a single order, no matter
+                  how large. Set to ₦0 for no cap (pure percentage).
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground shrink-0">₦</span>
                   <Input
                     type="number"
-                    value={fees.buyerConvenienceFee / 100}
+                    value={fees.buyerEscrowFeeCapKobo / 100}
                     onChange={e => setFees(p => ({
                       ...p,
-                      buyerConvenienceFee: Math.round(parseFloat(e.target.value || "0") * 100),
+                      buyerEscrowFeeCapKobo: Math.round(parseFloat(e.target.value || "0") * 100),
                     }))}
-                    step={50}
+                    step={100}
                     min={0}
-                    max={500}
                     className="max-w-[120px]"
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  {fees.buyerEscrowFeeCapKobo > 0
+                    ? `Capped at ₦${(fees.buyerEscrowFeeCapKobo / 100).toLocaleString()} per order`
+                    : "No cap — fee scales with order size"}
+                </p>
               </div>
 
               <div className="space-y-1">
@@ -366,27 +436,21 @@ export default function AdminFeesPage() {
                 <Input
                   value={fees.buyerFeeLabel}
                   onChange={e => setFees(p => ({ ...p, buyerFeeLabel: e.target.value }))}
-                  placeholder="e.g. Processing fee"
+                  placeholder="e.g. Buyer Protection & Escrow Fee"
                   className="max-w-xs"
                 />
               </div>
 
               <InfoBox color="green">
-                Buyers will see: <strong>"{fees.buyerFeeLabel}: +₦{(fees.buyerConvenienceFee / 100).toLocaleString()}"</strong> in the order summary before paying.
+                On a ₦100,000 order, buyers see: <strong>"{fees.buyerFeeLabel}: +₦{(applyPreviewCap(Math.floor(10000000 * fees.buyerEscrowFeePercent / 100), fees.buyerEscrowFeeCapKobo) / 100).toLocaleString()} ({fees.buyerEscrowFeePercent}%)"</strong> in the order summary before paying.
               </InfoBox>
-
-              {fees.buyerConvenienceFee > 20000 && (
-                <InfoBox color="amber">
-                  ⚠️ Fee is above ₦200. Buyers may notice and abandon checkout. Consider keeping it at ₦100–₦150.
-                </InfoBox>
-              )}
             </>
           )}
 
           {!fees.buyerFeeEnabled && (
             <div className="flex items-start gap-2 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              Buyer fee is off. Buyers pay item price only. No convenience fee will appear at checkout.
+              Buyer fee is off. Buyers pay item price only. No escrow fee will appear at checkout.
             </div>
           )}
         </CardContent>
