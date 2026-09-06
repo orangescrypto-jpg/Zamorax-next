@@ -1042,16 +1042,13 @@ export function ListingDetailClient({ id, initialListing }: Props) {
             </div>
           )}
 
-          {/* Location — hidden for official/Zamorax Direct listings, same
-              rule as ListingCard: backed by Zamorax itself, no seller
-              address relevant to the buyer. Views count still shows either way. */}
+          {/* Location — now shown for all listings, including official/
+              Zamorax Direct ones. Views count still shows either way. */}
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {!listing.isOfficial && (
-              <span className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 shrink-0" />
-                {listing.city}, {listing.nigerianState}
-              </span>
-            )}
+            <span className="flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 shrink-0" />
+              {listing.city}, {listing.nigerianState}
+            </span>
             {typeof listing.views === "number" && listing.views > 0 && (
               <span className="flex items-center gap-1">
                 <Eye className="h-4 w-4 shrink-0" />
@@ -1429,3 +1426,4 @@ export function ListingDetailClient({ id, initialListing }: Props) {
     </>
   )
 }
+
