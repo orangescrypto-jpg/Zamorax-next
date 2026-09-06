@@ -2,8 +2,8 @@
 // app/(public)/page.tsx
 // Homepage — conversion-optimised section order:
 // Hero → TrustBar → GroupBuy → CategoryGrid → FlashDeals → PromoStrip
-//   → FeaturedListings → ZamoraxDirect → CategoryListings → RecentlyViewed
-//   → HowItWorks → Blog → Seller CTA
+//   → FeaturedListings → Rentals → ZamoraxDirect → CategoryListings
+//   → RecentlyViewed → HowItWorks → Blog → Seller CTA
 
 import { Hero }               from "@/components/home/Hero"
 import { HeaderBanner }        from "@/components/shared/HeaderBanner"
@@ -15,6 +15,7 @@ import { FlashDealsSection }  from "@/components/home/FlashDealsSection"
 import { PromoStrip }         from "@/components/home/PromoStrip"
 import { FlashSaleListingsSection } from "@/components/home/FlashSaleListingsSection"
 import { FeaturedListings }   from "@/components/home/FeaturedListings"
+import { RentalsSection }     from "@/components/home/RentalsSection"
 import { ZamoraxDirectSection } from "@/components/home/ZamoraxDirectSection"
 import { FreeDeliverySection } from "@/components/home/FreeDeliverySection"
 import { GroupBuySection }    from "@/components/home/GroupBuySection"
@@ -33,6 +34,7 @@ export default function HomePage() {
   const { isAuthenticated, isSeller } = useAuth()
   const { settings } = usePlatformSettings()
   const [featuredIds, setFeaturedIds] = useState<string[]>([])
+  const [rentalIds, setRentalIds] = useState<string[]>([])
   const [directIds, setDirectIds] = useState<string[]>([])
 
   const handleStartSelling = () => {
@@ -83,6 +85,12 @@ export default function HomePage() {
         {/* 6 — Featured / Boosted Listings */}
         {settings.homepageFeaturedListingsEnabled && <FeaturedListings onLoaded={setFeaturedIds} />}
 
+        {/* 6.2 — Rentals carousel, placed right after Featured Listings.
+            Auto+manual swipe carousel, same pattern as Zamorax Direct
+            below — onLoaded feeds excludeIds so the same rental doesn't
+            also render twice in CategoryListings further down. */}
+        <RentalsSection onLoaded={setRentalIds} />
+
         {/* 6.5 — Zamorax Direct: official Zamorax Enterprises listings —
             bulk-sourced, locally warehoused stock. Placed right after
             Featured Listings so it reads as another curated/trust row.
@@ -98,7 +106,7 @@ export default function HomePage() {
         <FreeDeliverySection />
 
         {/* 7 — Live listings by category */}
-        <CategoryListings excludeIds={[...featuredIds, ...directIds]} />
+        <CategoryListings excludeIds={[...featuredIds, ...rentalIds, ...directIds]} />
 
         {/* 8 — Recently Viewed — re-engage returning visitors */}
         {settings.recentlyViewedEnabled && <RecentlyViewedRow />}
