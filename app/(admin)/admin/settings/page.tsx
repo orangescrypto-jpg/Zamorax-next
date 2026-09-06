@@ -268,6 +268,9 @@ interface Settings {
   // ── Zamorax Direct (official/enterprise seller listings) ─────────────────
   homepageZamoraxDirectEnabled: boolean
   homepageZamoraxDirectCount: number
+  // ── Rentals carousel ───────────────────────────────────────────────────────
+  homepageRentalsEnabled: boolean
+  homepageRentalsCount: number
 
   // ── Dispute controls ──────────────────────────────────────────────────────
   disputeFilingEnabled: boolean
@@ -584,6 +587,8 @@ const DEFAULTS: Settings = {
   homepageFeaturedListingsEnabled: true,
   homepageZamoraxDirectEnabled: true,
   homepageZamoraxDirectCount: 8,
+  homepageRentalsEnabled: true,
+  homepageRentalsCount: 8,
   // Dispute controls
   disputeFilingEnabled: true,
   // Social links & contact
@@ -1792,6 +1797,22 @@ export default function AdminSettingsPage() {
             desc='How many to show before the "See all" link — rest are on the full Zamorax Enterprises Direct page'
             value={s.homepageZamoraxDirectCount}
             onChange={num("homepageZamoraxDirectCount")}
+            min={1}
+            max={24}
+          />
+        )}
+        <ToggleRow
+          label="Rentals section"
+          desc="Rental listings carousel, placed after Featured Listings"
+          checked={s.homepageRentalsEnabled}
+          onChange={bool("homepageRentalsEnabled")}
+        />
+        {s.homepageRentalsEnabled && (
+          <NumField
+            label="Rental listings shown on homepage"
+            desc='How many to show before the "See more" link — rest are on the full Rentals page'
+            value={s.homepageRentalsCount}
+            onChange={num("homepageRentalsCount")}
             min={1}
             max={24}
           />
