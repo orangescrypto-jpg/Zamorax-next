@@ -150,6 +150,10 @@ export interface PlatformSettings {
   // Zamorax Direct (official/enterprise seller listings)
   homepageZamoraxDirectEnabled: boolean
   homepageZamoraxDirectCount: number
+  // Rentals carousel — mirrors Zamorax Direct's shape, backed by
+  // listingType: "rent" listings instead of official ones
+  homepageRentalsEnabled: boolean
+  homepageRentalsCount: number
   // Group buy
   groupBuyEnabled: boolean
   groupBuyMinParticipants: number
@@ -442,6 +446,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   homepageFeaturedListingsEnabled: true,
   homepageZamoraxDirectEnabled: true,
   homepageZamoraxDirectCount: 8,
+  homepageRentalsEnabled: true,
+  homepageRentalsCount: 8,
   groupBuyEnabled: true,
   groupBuyMinParticipants: 5,
   groupBuyDiscountPercent: 15,
