@@ -277,7 +277,10 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
   const grandTotal = useCallback(() => {
     const itemsTotal    = getCartTotal()
     const deliveryTotal = Object.values(deliverySelections).reduce((sum, s) => sum + s.fee, 0)
-    const buyerFee      = fees.buyerFeeEnabled ? fees.buyerConvenienceFee : 0
+    // Buyer escrow fee is now percentage-based + capped (see feeSettings.ts) —
+    // computed against the whole-cart items total via the same calculateFees()
+    // helper the per-seller loop below uses, so the cap applies consistently.
+    const buyerFee = calculateFees(itemsTotal, "sale", fees).buyerConvenienceKobo
     return itemsTotal + deliveryTotal + buyerFee
   }, [getCartTotal, deliverySelections, fees])
 
@@ -369,7 +372,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
           deliveryState:       state,
           deliveryLga:         lga,
           cartItems:           cartPayload,
-          buyerConvenienceFee: fees.buyerFeeEnabled ? fees.buyerConvenienceFee : 0,
+          buyerConvenienceFee: calculateFees(getCartTotal(), "sale", fees).buyerConvenienceKobo,
         }),
       })
 
@@ -752,8 +755,8 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                   </div>
                   {fees.buyerFeeEnabled && (
                     <div className="flex justify-between text-muted-foreground">
-                      <span>{fees.buyerFeeLabel || "Processing fee"}</span>
-                      <span>{formatPrice(fees.buyerConvenienceFee)}</span>
+                      <span>{fees.buyerFeeLabel || "Buyer Protection & Escrow Fee"}</span>
+                      <span>{formatPrice(calculateFees(getCartTotal(), "sale", fees).buyerConvenienceKobo)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-foreground border-t border-border pt-1.5">
@@ -802,7 +805,7 @@ export function CartCheckoutModal({ open, onClose, onSuccess }: Props) {
                     customer" for processing fees, so the amount debited on
                     the customer's card/bank statement is slightly higher
                     than the Grand Total shown above. This is unrelated to
-                    fees.buyerConvenienceFee (our own platform fee, already
+                    the buyer escrow fee (our own platform fee, already
                     itemized above) — this note is only about the gateway's
                     own cut. Not shown for manual bank transfer, since that
                     path isn't run through the gateway. */}
